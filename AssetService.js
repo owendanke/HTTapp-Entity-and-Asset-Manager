@@ -1,7 +1,7 @@
 /**
  * AssetService.gs
  * ---------------
- * Core business logic for asset management (CRUD operations).
+ * Core logic for asset management (CRUD operations).
  * Delegates all GCS I/O to StorageService and all hash/log updates
  * to HashService, keeping each class focused on a single responsibility.
  *
@@ -44,19 +44,36 @@ class AssetService {
     return [...ASSET_FILE_SCHEMA.common, ...typeFiles];
   }
 
+
+  /**
+   * Returns a object Resource parsed into an 
+   */
+  static parseObject(object) {
+    console.log(`[AssetService.gs][parseObject] id: ${object.id}`);
+
+    console.log(`[AssetService.gs][parseObject] name: ${object.name}`);
+
+    console.log(`[AssetService.gs][parseObject] md5Hash: ${object.md5Hash}`);
+  }
+
   /**
    * Lists all assets from GCS (both trees and signs).
    * @returns {Array<Object>} List of asset metadata objects.
    */
   static listAllAssets() {
-    console.log('[AssetService.gs] LIST ALL ASSETS');
+    console.log('[AssetService.gs][listAllAssets]');
     const allAssets = [];
 
     for (const type of CONFIG.ENTITY_TYPES) {
-      console.log(`[AssetService.gs]   → Fetching assets of type: ${type}`);
-      const objects = StorageService.listObjects(`${type}s/`);
-      // In production: parse folder structure from object list to build asset records
-      console.log(`[AssetService.gs]   → Would parse ${type} folder list into asset metadata records`);
+      console.log(`[AssetService.gs][listAllAssets] Fetching assets of type: ${type}`);
+      const items = StorageService.listObjects(`${type}s/`);
+
+      if (items && items.length > 0) {
+        console.log(`[AssetService.gs][listAllAssets] Parsing ${type} object list into asset metadata records...`);
+        items.forEach(obj => {
+          AssetService.parseObject(obj);
+        });
+      }
     }
 
     // ── Stub: return mock asset records for UI development ─────────────────
@@ -98,7 +115,7 @@ class AssetService {
       },
     ];
 
-    console.log(`[AssetService.gs] LIST COMPLETE — Returning ${mockAssets.length} mock asset(s)`);
+    console.log(`[AssetService.gs][listAllAssets] LIST COMPLETE — Returning ${mockAssets.length} mock asset(s)`);
     return mockAssets;
   }
 
@@ -117,10 +134,10 @@ class AssetService {
     const { id, type, name, files } = assetData;
     const errors = [];
 
-    console.log(`[AssetService.gs] UPLOAD ASSET`);
-    console.log(`[AssetService.gs]   → ID   : ${id}`);
-    console.log(`[AssetService.gs]   → Type : ${type}`);
-    console.log(`[AssetService.gs]   → Name : ${name}`);
+    console.log(`[AssetService.gs][uploadAsset]`);
+    console.log(`[AssetService.gs][uploadAsset] ID: ${id}`);
+    console.log(`[AssetService.gs][uploadAsset] Type: ${type}`);
+    console.log(`[AssetService.gs][uploadAsset] Name: ${name}`);
 
     // ── Validate type ──────────────────────────────────────────────────────
     if (!CONFIG.ENTITY_TYPES.includes(type)) {

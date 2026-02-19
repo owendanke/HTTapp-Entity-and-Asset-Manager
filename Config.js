@@ -14,7 +14,7 @@ const CONFIG = {
   CLIENT_ID: scriptProperties.getProperty('client_id'),
   CLIENT_SECRET: scriptProperties.getProperty('client_secret'),
 
-  // entity type definitions
+  // entity type definitions (must be singular noun)
   ENTITY_TYPES: ['tree', 'sign'], 
 
   // google drive id for favicon image

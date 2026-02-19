@@ -983,13 +983,15 @@ td.col-actions { text-align: right; }
    google.script.run call in _run().
 ══════════════════════════════════════════════════════════════════════ */
 const ServerBridge = (() => {
+  function reject(error) {
+    //Toast.error(`ERROR: ${error.message}`);
+  }
 
   // Wraps a google.script.run call in a Promise.
   function _run(fnName, ...args) {
     // debugging when a server function is wrong
     if (typeof google.script.run[fnName] !== 'function') {
-      reject(new Error(`Server function "${fnName}" not found`));
-      return;
+      reject(`Server function "${fnName}" not found`);
     }
     
     return new Promise((resolve, reject) => {
@@ -1151,7 +1153,7 @@ App.Auth = (() => {
     label.textContent = 'Opening sign-in…';
     document.getElementById('login-error').classList.remove('visible');
 
-    console.log('[Auth] loginWithGoogle() — requesting auth URL from server');
+    console.log('[Auth] loginWithGoogle() - requesting auth URL from server');
 
     let authUrl;
     try {
@@ -1717,12 +1719,6 @@ function onFailure() {
 
 document.getElementById('google-login-btn').addEventListener('click', (event) => {
   App.Auth.loginWithGoogle();
-  /*
-  google.script.run
-    .withSuccessHandler(onSuccess)
-    .withFailureHandler(onFailure)
-    .commTest('[loginWithGoogle] called server function!');
-    */
 });
 
 /* ════════════════════════════════════════════════════════════════════

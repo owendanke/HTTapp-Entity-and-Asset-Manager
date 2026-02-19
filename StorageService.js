@@ -16,15 +16,43 @@ class StorageService {
 
   /**
    * Lists all objects under a given GCS prefix.
+   * 
+   * Object resource documentation: https://docs.cloud.google.com/storage/docs/json_api/v1/objects#resource
+   * 
    * @param {string} prefix - e.g. "trees/" or "signs/"
-   * @returns {Array<Object>} List of object metadata stubs.
+   * @returns {Array<Object>} List of object resource metadata stubs.
    */
   static listObjects(prefix) {
+    console.log(`[StorageService.gs][listObjects] prefix: ${prefix}`);
+
+    // create HTTP request url 
     const url = `https://storage.googleapis.com/storage/v1/b/${CONFIG.BUCKET_NAME}/o?prefix=${prefix}`;
-    console.log(`[StorageService.gs] LIST OBJECTS`);
-    console.log(`[StorageService.gs] API CALL (stubbed): GET ${url}`);
-    console.log(`[StorageService.gs]   → Would return JSON list of objects under gs://${CONFIG.BUCKET_NAME}/${prefix}`);
-    return [];
+
+
+    const service = AuthService._getCloudService();
+
+    if (!service.hasAccess()) {
+      console.log('[StorageService.gs][listObjects] No valid OAuth session');
+    }
+
+    const token = service.getAccessToken();
+
+    // use UrlFetchApp.fetch to send GET to GCS 
+    console.log(`[StorageService.gs][listObjects] GET ${url}`);
+    var response = UrlFetchApp.fetch(url, {headers: { Authorization: 'Bearer ' + token }, 'muteHttpExceptions': true});
+    var code = response.getResponseCode();
+
+    if (code === 200) {
+      // parse the data and return the list of objects Resource
+      var json = response.getContentText();
+      var data = JSON.parse(json);
+      
+      return data['items'];
+    }
+
+    console.log(`[StorageService.gs][listObjects] response code other than 200! Code: ${code}`);
+    
+    return null;
   }
 
   /**
