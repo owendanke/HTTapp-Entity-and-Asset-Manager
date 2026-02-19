@@ -1,0 +1,1738 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTapp Asset Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ─── CSS Variables ─────────────────────────────────────────────── */
+:root {
+  --primary:     #d5d5d5;
+  --surface:     #fef9eb; /* #161a20; */
+  --surface2:    #f2eee0; /* #1e242d; */
+  --surface3:    #e7e2d5; /* #252d38; */
+  --bg:          #ffffff; /* #0d0f12; */
+  --border:      #2a3340;
+  --border-hi:   #3d4f63;
+  --accent:      #2e6a44;
+  --accent-hi:   #4EB172;
+  --accent-dim:  #245235;
+  --accent-text: #ffffff;
+  --tree-badge:  68 145 64;
+  --sign-badge:  33 140 194;
+  --danger:      #ef4444;
+  --danger-hi:   #f87171;
+  --success:     #22c55e;
+  --warn:        #f59e0b;
+  --text:        #000000;
+  --text-muted:  #242424;
+  --text-dim:    #3B3B3B;
+  --mono:        'IBM Plex Mono', monospace;
+  --sans:        'IBM Plex Sans', sans-serif;
+  --radius:      6px;
+  --radius-lg:   10px;
+  --shadow:      0 4px 24px rgba(0,0,0,0.5);
+  --shadow-lg:   0 8px 40px rgba(0,0,0,0.7);
+}
+
+/* ─── Reset & Base ──────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ─── Scrollbar ─────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--surface); }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+
+/* ─── Typography helpers ────────────────────────────────────────── */
+.mono { font-family: var(--mono); }
+.muted { color: var(--text-muted); }
+.dim { color: var(--text-dim); }
+
+/* ─── Overlay backdrop ──────────────────────────────────────────── */
+.overlay {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+.overlay.hidden { display: none; }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Modal ─────────────────────────────────────────────────────── */
+.modal {
+  background: var(--primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: slideUp 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ─── Button styles ─────────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 16px;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  font-family: var(--sans); font-size: 13px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s ease;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent-hi);
+  border-color: var(--accent-hi);
+}
+
+.btn-ghost {
+  background: transparent; color: var(--text-dim); border-color: var(--border);
+}
+.btn-ghost:hover:not(:disabled) { background: var(--surface2); border-color: var(--border-hi); color: var(--text); }
+
+.btn-danger {
+  background: transparent; color: var(--danger); border-color: var(--danger);
+}
+.btn-danger:hover:not(:disabled) { background: rgba(239,68,68,0.1); }
+
+.btn-icon {
+  padding: 6px; background: transparent; border: none;
+  color: var(--text-muted); border-radius: var(--radius);
+  cursor: pointer; transition: all 0.15s;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.btn-icon:hover { background: var(--surface2); color: var(--text); }
+
+/* ─── Form inputs ───────────────────────────────────────────────── */
+.input, .select, .textarea {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-family: var(--sans); font-size: 13px;
+  padding: 8px 12px;
+  transition: border-color 0.15s;
+  outline: none;
+}
+.input:focus, .select:focus, .textarea:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59,130,246,0.1);
+}
+.select { cursor: pointer; }
+.textarea { resize: vertical; min-height: 80px; line-height: 1.5; }
+
+label {
+  display: block;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-dim);
+  margin-bottom: 5px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+/* ─── File drop zone ────────────────────────────────────────────── */
+.drop-zone {
+  border: 1.5px dashed var(--border-hi);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--bg);
+  color: var(--text-muted);
+  font-size: 12px;
+  position: relative;
+}
+.drop-zone:hover, .drop-zone.dragover {
+  border-color: var(--accent);
+  background: rgba(59,130,246,0.04);
+  color: var(--text-dim);
+}
+.drop-zone input[type="file"] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.drop-zone .dz-icon { font-size: 20px; margin-bottom: 4px; display: block; }
+
+/* ─── Badges ────────────────────────────────────────────────────── */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; font-family: var(--mono);
+  letter-spacing: 0.03em;
+}
+.badge-tree  {
+  background: rgb(var(--tree-badge) / 0.5);
+  color: var(--tree-badge);
+  border: 1px solid rgb(var(--tree-badge) / 0.75);
+}
+.badge-sign  {
+  background: rgb(var(--sign-badge) / 0.5);
+  color: var(--sign-badge);
+  border: 1px solid rgb(var(--sign-badge) / 0.75);
+}
+
+/* ─── Toast notifications ───────────────────────────────────────── */
+#toast-container {
+  position: fixed; top: 20px; right: 20px;
+  z-index: 9999; display: flex; flex-direction: column; gap: 8px;
+}
+.toast {
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  border-left: 3px solid;
+  background: var(--surface2);
+  box-shadow: var(--shadow);
+  animation: slideInRight 0.25s ease;
+  max-width: 320px;
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.toast-success { border-color: var(--success); color: var(--success); }
+.toast-error   { border-color: var(--danger);  color: var(--danger-hi); }
+.toast-info    { border-color: var(--accent);  color: var(--accent-hi); }
+
+/* ══════════════════════════════════════════════════════════════════
+   LOGIN MODAL
+══════════════════════════════════════════════════════════════════ */
+#login-overlay {
+  /* background: radial-gradient(ellipse at 50% 0%, rgba(59,130,246,0.08) 0%, rgba(0,0,0,0.85) 70%); */
+  background: var(--bg);
+}
+#login-modal {
+  width: 380px;
+  padding: 40px 36px 36px;
+}
+.login-logo {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 28px; justify-content: center;
+}
+.login-logo-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent-dim), var(--accent));
+  display: flex; align-items: center;
+  justify-content: center;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 15px;
+  color: #fff;
+}
+.login-title {
+  font-family: var(--mono); font-size: 16px; font-weight: 600; color: var(--text);
+  line-height: 1.2;
+}
+.login-subtitle { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+
+.login-form { display: flex; flex-direction: column; gap: 16px; }
+.login-form-group { display: flex; flex-direction: column; }
+
+#login-error {
+  background: rgba(239,68,68,0.08);
+  border: 1px solid rgba(239,68,68,0.2);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-size: 12px; color: var(--danger-hi);
+  display: none;
+}
+#login-error.visible { display: block; }
+
+.google-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px 16px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: var(--radius); color: var(--text-black);
+  font-size: 14px; font-weight: 500;
+  cursor: pointer; transition: all 0.15s; width: 100%;
+}
+.google-btn:hover { background: var(--surface3); border-color: var(--border-hi); }
+
+.google-icon {
+  width: 18px; height: 18px; flex-shrink: 0;
+}
+
+.divider {
+  display: flex; align-items: center; gap: 12px;
+  color: var(--text-muted); font-size: 11px;
+}
+.divider::before, .divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--border);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MAIN APP LAYOUT
+══════════════════════════════════════════════════════════════════ */
+#app { display: none; flex-direction: column; height: 100vh; }
+#app.visible { display: flex; }
+
+/* ─── Header ────────────────────────────────────────────────────── */
+#header {
+  height: 54px;
+  background: var(--primary);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 24px;
+  flex-shrink: 0;
+}
+.header-brand {
+  display: flex; align-items: center; gap: 10px;
+}
+.header-logo-mark {
+  width: 28px; height: 28px; border-radius: 6px;
+  background: linear-gradient(135deg, var(--accent-dim), var(--accent));
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 11px; font-weight: 600; color: #fff;
+}
+.header-title {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+.user-chip {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 10px;
+  background: var(--surface2); border: 1px solid var(--border);
+  border-radius: 20px; font-size: 12px; color: var(--text-dim);
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; } 50% { opacity: 0.4; }
+}
+
+/* ─── Main content ──────────────────────────────────────────────── */
+#main {
+  flex: 1; overflow-y: auto;
+  padding: 24px;
+}
+
+/* ─── Table toolbar ─────────────────────────────────────────────── */
+.toolbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 16px;
+}
+.toolbar-left { display: flex; align-items: center; gap: 12px; }
+.section-title {
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  color: var(--text-black); text-transform: uppercase; letter-spacing: 0.08em;
+}
+
+.search-input {
+  background: var(--surface3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text--black); font-family: var(--mono); font-size: 12px;
+  padding: 6px 10px; width: 220px; outline: none; transition: border-color 0.15s;
+}
+.search-input:focus { border-color: var(--accent); }
+.search-input::placeholder { color: var(--text-black); }
+
+.filter-select {
+  background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text-black); font-size: 12px;
+  padding: 6px 10px; outline: none; cursor: pointer;
+}
+
+/* ─── Entity table ───────────────────────────────────────────────── */
+.table-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+table { width: 100%; border-collapse: collapse; }
+
+thead tr {
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+}
+/* table header */
+th {
+  padding: 10px 16px;
+  font-family: var(--mono); font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  color: var(--text); text-align: left;
+  white-space: nowrap;
+}
+th.col-actions { text-align: right; width: 48px; }
+
+tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+}
+tbody tr:last-child { border-bottom: none; }
+tbody tr:hover { background: var(--surface2); }
+
+td {
+  padding: 12px 16px;
+  font-size: 13px; color: var(--text);
+  vertical-align: middle;
+}
+td.col-id { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+td.col-actions { text-align: right; }
+
+.table-empty {
+  padding: 60px 20px; text-align: center;
+  color: var(--text-muted); font-size: 13px;
+}
+.table-empty .empty-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.4; }
+
+/* ─── Ellipsis / Options menu ───────────────────────────────────── */
+.options-menu-wrapper { position: relative; display: inline-flex; }
+
+.options-dropdown {
+  position: absolute; right: 0; top: calc(100% + 4px);
+  background: var(--surface2);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  min-width: 130px;
+  z-index: 100;
+  overflow: hidden;
+  animation: dropDown 0.15s ease;
+}
+@keyframes dropDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.options-dropdown .menu-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px;
+  font-size: 13px; color: var(--text-black);
+  cursor: pointer; transition: all 0.1s;
+  border: none; background: none; width: 100%; text-align: left;
+}
+.options-dropdown .menu-item:hover { background: var(--surface3); color: var(--text); }
+.options-dropdown .menu-item.danger:hover { color: var(--danger-hi); background: rgba(239,68,68,0.06); }
+.options-dropdown .menu-divider { height: 1px; background: var(--border); margin: 2px 0; }
+
+/* ══════════════════════════════════════════════════════════════════
+   UPLOAD MODAL  (matches wireframe layout)
+══════════════════════════════════════════════════════════════════ */
+#upload-overlay .modal {
+  width: 820px;
+  max-width: 96vw;
+  max-height: 92vh;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.modal-title {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.modal-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 20px;
+  padding: 20px 24px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+/* column container, (a row of columns) */
+.modal-columns {
+  display: flex;
+  flex-shrink: 0;
+  gap: 20px;
+}
+
+/* Left column */
+.upload-left {
+  flex: 1.1;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  gap: 16px;
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* Right column */
+.upload-right {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  width: 240px;
+  gap: 16px;
+  overflow-y: auto;
+}
+
+/* Gallery carousel section */
+.gallery-section {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.gallery-header {
+  padding: 10px 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.gallery-label { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.gallery-count { font-family: var(--mono); font-size: 11px; color: var(--text-muted); }
+
+.gallery-carousel {
+  display: flex; gap: 8px;
+  padding: 12px 14px; overflow-x: auto;
+  min-height: 100px; align-items: center;
+}
+.gallery-carousel::-webkit-scrollbar { height: 4px; }
+
+.gallery-thumb {
+  width: 80px; height: 80px; border-radius: var(--radius);
+  border: 1px solid var(--border-hi); overflow: hidden;
+  flex-shrink: 0; position: relative; cursor: pointer;
+}
+.gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.gallery-thumb-remove {
+  position: absolute; top: 2px; right: 2px;
+  background: rgba(0,0,0,0.7); border: none; border-radius: 50%;
+  width: 18px; height: 18px; color: var(--danger);
+  font-size: 11px; cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.15s;
+}
+.gallery-thumb:hover .gallery-thumb-remove { opacity: 1; }
+
+.gallery-add-btn {
+  width: 80px; height: 80px; border-radius: var(--radius);
+  border: 1.5px dashed var(--border-hi);
+  background: transparent; color: var(--text-muted);
+  cursor: pointer; transition: all 0.15s;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  font-size: 11px; flex-shrink: 0;
+}
+.gallery-add-btn:hover { border-color: var(--accent); color: var(--accent); }
+.gallery-add-btn input { position: absolute; opacity: 0; width: 0; height: 0; }
+.gallery-add-btn .plus { font-size: 20px; line-height: 1; }
+
+/* Hidden on sign type */
+.gallery-section.hidden { display: none; }
+
+/* Asset props section */
+.props-section {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.props-inner { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.props-title {
+  padding: 10px 14px;
+  font-size: 12px; font-weight: 600; color: var(--text-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+/* Markdown preview */
+.markdown-section {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow-y: auto;
+  flex: 1;
+  flex-shrink: 0;
+  min-height: 300;
+}
+.markdown-header {
+  padding: 10px 14px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border);
+}
+.markdown-label { font-size: 12px; font-weight: 600; color: var(--text-dim); }
+.markdown-tabs { display: flex; gap: 2px; }
+.md-tab {
+  padding: 3px 10px; border-radius: var(--radius);
+  font-size: 11px; font-weight: 500; cursor: pointer;
+  border: none; background: transparent; color: var(--text-muted);
+  transition: all 0.15s;
+}
+.md-tab.active { background: var(--surface3); color: var(--text); }
+.markdown-content {
+  padding: 12px 14px; min-height: 100px;
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.6;
+  flex: 1;
+}
+.markdown-content textarea {
+  width: 100%; background: transparent; border: none; outline: none;
+  color: var(--text); font-family: var(--mono); font-size: 12px;
+  resize: none; min-height: 100px; line-height: 1.6;
+}
+#md-preview { display: none; }
+#md-preview h1, #md-preview h2, #md-preview h3 { color: var(--text); margin-bottom: 6px; }
+#md-preview p { margin-bottom: 8px; }
+#md-preview strong { color: var(--accent-hi); }
+#md-preview code { font-family: var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+
+/* Right column: thumbnail + file checklist */
+.thumb-section {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.thumb-preview-area {
+  height: 110px; position: relative;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; overflow: hidden; background: var(--bg);
+}
+.thumb-preview-area img {
+  width: 100%; height: 100%; object-fit: cover;
+}
+.thumb-placeholder {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  color: var(--text-muted); font-size: 11px;
+}
+.thumb-placeholder-icon { font-size: 24px; }
+.thumb-preview-area input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.thumb-label {
+  padding: 8px 12px;
+  font-size: 11px; font-weight: 600; color: var(--text-muted);
+  border-top: 1px solid var(--border); text-align: center;
+  letter-spacing: 0.05em; text-transform: uppercase;
+}
+
+/* File checklist */
+.checklist-section {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  flex: 1;
+}
+.checklist-header { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.checklist-title { font-size: 12px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+.checklist-subtitle { font-size: 11px; color: var(--text-muted); }
+.checklist-body { padding: 8px; display: flex; flex-direction: column; gap: 4px; }
+
+.checklist-item {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 7px 10px;
+  border-radius: var(--radius);
+  cursor: pointer; transition: background 0.1s;
+  border: 1px solid transparent;
+}
+.checklist-item:hover { background: var(--surface3); }
+.checklist-item.active { background: rgba(59,130,246,0.06); border-color: rgba(59,130,246,0.2); }
+.checklist-item.done { background: rgba(34,197,94,0.04); border-color: rgba(34,197,94,0.15); }
+
+.ci-name { font-size: 12px; font-family: var(--mono); color: var(--text-dim); }
+.checklist-item.active .ci-name { color: var(--accent-hi); }
+.checklist-item.done .ci-name { color: var(--success); text-decoration: line-through; opacity: 0.7; }
+
+.ci-status {
+  width: 22px; height: 22px; border-radius: 50%;
+  border: 1.5px solid var(--border-hi);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 11px; transition: all 0.15s;
+}
+.checklist-item.active .ci-status { border-color: var(--accent); background: rgba(59,130,246,0.1); color: var(--accent); }
+.checklist-item.done .ci-status { border-color: var(--success); background: rgba(34,197,94,0.12); color: var(--success); }
+
+.modal-footer {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   DELETE CONFIRM MODAL
+══════════════════════════════════════════════════════════════════ */
+#delete-overlay .modal {
+  width: 400px;
+  padding: 28px;
+  border: 8px;
+}
+.delete-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: rgba(239,68,68,0.1);
+  border: 1px solid rgba(239,68,68,0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+.delete-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+.delete-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; }
+.delete-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* ── Spin loader ─────────────────────────────────────────────────── */
+.spinner {
+  width: 14px; height: 14px; border-radius: 50%;
+  border: 2px solid rgba(255,255,255,0.2);
+  border-top-color: #fff;
+  animation: spin 0.7s linear infinite; display: none;
+}
+.spinner.visible { display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+</style>
+</head>
+<body>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  TOAST CONTAINER                                               ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="toast-container"></div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  LOGIN OVERLAY                                                 ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="login-overlay" class="overlay">
+  <div id="login-modal" class="modal">
+    <div class="login-logo">
+      <div class="login-logo-mark">HTT</div>
+      <div>
+        <div class="login-title">HTTapp Asset Manager</div>
+        <div class="login-subtitle">Secure asset management portal</div>
+      </div>
+    </div>
+
+    <!-- Error banner (shown on failed / blocked auth) -->
+    <div id="login-error">
+      <strong>Sign-in failed.</strong> <span id="login-error-msg">Please try again.</span>
+    </div>
+
+    <!-- Google OAuth button (primary method) -->
+    <div class="login-form">
+      <button class="google-btn" id="google-login-btn">
+        <svg class="google-icon" viewBox="0 0 24 24">
+          <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+          <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+          <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+          <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+        </svg>
+        <span id="google-btn-label">Continue with Google</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  MAIN APP                                                      ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="app">
+
+  <!-- HEADER -->
+  <header id="header">
+    <div class="header-brand">
+      <div class="header-logo-mark">HTT</div>
+      <span class="header-title">HTTapp Asset Manager</span>
+    </div>
+    <div class="header-actions">
+      <div class="user-chip">
+        <span id="user-name">user</span>
+      </div>
+      <button class="btn btn-primary" onclick="App.Upload.open()">Upload Entity</button>
+      <button class="btn btn-ghost" onclick="App.Auth.signOut()">Sign Out</button>
+    </div>
+  </header>
+
+  <!-- BODY -->
+  <main id="main">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <span class="section-title">Entites</span>
+        <input type="text" class="search-input" id="search-input" placeholder="Search by name or ID…" oninput="App.Table.filter()">
+        <select class="filter-select" id="type-filter" onchange="App.Table.filter()">
+          <option value="all">All Types</option>
+          <option value="tree">tree</option>
+          <option value="sign">sign</option>
+        </select>
+      </div>
+      <span id="asset-count" class="mono muted" style="font-size:11px;"></span>
+    </div>
+
+    <div class="table-container">
+      <table id="asset-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Type</th>
+            <th>Name</th>
+            <th>Date Uploaded</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="asset-tbody">
+          <tr>
+            <td colspan="5" class="table-empty">
+              <div class="empty-icon">◫</div>
+              <div>Loading assets…</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  UPLOAD MODAL                                                  ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="upload-overlay" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="upload-modal-title">Upload New Asset</span>
+      <button class="btn-icon" onclick="App.Upload.close()">✕</button>
+    </div>
+
+    <div class="modal-body">
+      <div class="modal-columns">
+        <!-- ─── LEFT COLUMN ──────────────────────────────────────── -->
+        <div class="upload-left">
+
+          <!-- Gallery carousel (hidden for sign) -->
+          <div class="gallery-section" id="gallery-section">
+            <div class="gallery-header">
+              <span class="gallery-label">Image Gallery Carousel</span>
+              <span class="gallery-count" id="gallery-count">0 images</span>
+            </div>
+            <div class="gallery-carousel" id="gallery-carousel">
+              <button class="gallery-add-btn" onclick="document.getElementById('gallery-file-input').click()">
+                <span class="plus">+</span>
+                <span>Add</span>
+              </button>
+              <input type="file" id="gallery-file-input" accept="image/*" multiple style="display:none"
+                onchange="App.Upload.addGalleryImages(this.files)">
+            </div>
+          </div>
+
+          <!-- Asset properties -->
+          <div class="props-section">
+            <div class="props-title">Asset Properties</div>
+            <div class="props-inner">
+              <div>
+                <label>Asset Type</label>
+                <select class="select" id="upload-type" onchange="App.Upload.onTypeChange()">
+                  <option value="tree">tree</option>
+                  <option value="sign">sign</option>
+                </select>
+              </div>
+              <div>
+                <label>Asset ID <span style="color:var(--text-muted);text-transform:none;font-weight:400">(unique slug)</span></label>
+                <input type="text" class="input" id="upload-id" placeholder="e.g. tree-oak-001">
+              </div>
+              <div>
+                <label>Asset Name</label>
+                <input type="text" class="input" id="upload-name" placeholder="e.g. Heritage Oak — Riverside">
+              </div>
+              <div>
+                <label>GeoJSON Geometry</label>
+                <div class="drop-zone" id="geojson-dropzone">
+                  <span class="dz-icon">⌖</span>
+                  <span id="geojson-filename">Drop geometry.geojson or click to browse</span>
+                  <input type="file" accept=".geojson,application/json"
+                    onchange="App.Upload.onFileSelect('geometry', this)">
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div><!-- /upload-left -->
+
+        <!-- ─── RIGHT COLUMN ─────────────────────────────────────── -->
+        <div class="upload-right">
+
+          <!-- Thumbnail -->
+          <div class="thumb-section">
+            <div class="thumb-preview-area" id="thumb-preview-area">
+              <div class="thumb-placeholder" id="thumb-placeholder">
+                <span>Click to upload</span>
+              </div>
+              <img id="thumb-preview-img" style="display:none">
+              <input type="file" accept="image/*" onchange="App.Upload.onFileSelect('thumbnail', this)">
+            </div>
+            <div class="thumb-label">Thumbnail Image</div>
+          </div>
+
+          <!-- File checklist -->
+          <div class="checklist-section">
+            <div class="checklist-header">
+              <div class="checklist-title">File Checklist</div>
+              <div class="checklist-subtitle">Select an entry to upload file(s)</div>
+            </div>
+            <div class="checklist-body" id="checklist-body">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+        </div><!-- /upload-right -->
+      </div><!-- /modal-columns -->
+
+      <!-- Markdown preview -->
+      <div class="markdown-section">
+        <div class="markdown-header">
+          <span class="markdown-label">Markdown Preview</span>
+          <div class="markdown-tabs">
+            <button class="md-tab active" id="md-tab-edit" onclick="App.Upload.switchMdTab('edit')">Edit</button>
+            <button class="md-tab" id="md-tab-preview" onclick="App.Upload.switchMdTab('preview')">Preview</button>
+          </div>
+        </div>
+        <div class="markdown-content">
+          <textarea id="md-editor" placeholder="# Asset Description&#10;&#10;Write your description in Markdown…"
+            oninput="App.Upload.onMdEdit()" rows="6"></textarea>
+          <div id="md-preview"></div>
+        </div>
+      </div>
+
+    </div><!-- /modal-body -->
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="App.Upload.close()">Cancel</button>
+      <button class="btn btn-primary" id="upload-submit-btn" onclick="App.Upload.submit()">
+        <div class="spinner" id="upload-spinner"></div>
+        <span id="upload-submit-label">Verify + Upload</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  DELETE CONFIRM MODAL                                          ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="delete-overlay" class="overlay hidden">
+  <div class="modal">
+    <div class="delete-icon">🗑</div>
+    <div class="delete-title">Delete Asset</div>
+    <div class="delete-desc" id="delete-desc">
+      Are you sure you want to delete this asset? All associated files will be permanently removed from Google Cloud Storage. This action cannot be undone.
+    </div>
+    <div class="delete-actions">
+      <button class="btn btn-ghost" onclick="App.Delete.close()">Cancel</button>
+      <button class="btn btn-danger" id="delete-confirm-btn" onclick="App.Delete.confirm()">
+        <div class="spinner" id="delete-spinner"></div>
+        <span id="delete-confirm-label">Delete Asset</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  CLIENT-SIDE JAVASCRIPT                                        ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════
+   ServerBridge
+   ─────────────────────────────────────────────────────────────────
+   Wraps every google.script.run call in a Promise.
+   Each public method corresponds to a server-side function defined
+   in one of the .gs files.
+
+   In iteration 1 the _stub() path is used so the UI can be tested
+   without a live GCS connection. When real APIs are wired up, simply
+   replace the setTimeout(..._stub...) line with the commented-out
+   google.script.run call in _run().
+══════════════════════════════════════════════════════════════════════ */
+const ServerBridge = (() => {
+
+  // Wraps a google.script.run call in a Promise.
+  function _run(fnName, ...args) {
+    // debugging when a server function is wrong
+    if (typeof google.script.run[fnName] !== 'function') {
+      reject(new Error(`Server function "${fnName}" not found`));
+      return;
+    }
+    
+    return new Promise((resolve, reject) => {
+      console.log(`[ServerBridge] -> ${fnName}`);
+
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)[fnName](...args);
+    });
+  }
+
+  // ── Stub response definitions ──────────────────────────────────
+  const _stubs = {
+
+    serverGetAuthUrl() {
+      console.log('[ServerBridge][serverGetAuthUrl]');
+
+      console.log('  → Would call Auth.gs AuthService.getAuthorizationUrl()');
+      console.log('  → Would return: https://accounts.google.com/o/oauth2/auth?client_id=...&redirect_uri=...&scope=openid+email+profile');
+      // Return a stub sentinel so the client popup flow can complete
+      return '__STUB_AUTH__';
+    },
+
+    serverCheckSession() {
+      console.log('[ServerBridge stub] serverCheckSession()');
+      console.log('  → Would call Auth.gs AuthService.checkSession()');
+      console.log('  → Would validate stored OAuth2 token in PropertiesService');
+      return { authenticated: true, user: { name: 'Dev User', email: 'dev.user@httapp.com' } };
+    },
+
+    serverSignOut() {
+      console.log('[ServerBridge stub] serverSignOut()');
+      console.log('  → Would call Auth.gs AuthService.signOut()');
+      console.log('  → Would POST https://oauth2.googleapis.com/revoke?token=<access_token>');
+      console.log('  → Would clear PropertiesService user session');
+      return { success: true };
+    },
+
+    serverListAssets() {
+      console.log('[ServerBridge stub] serverListAssets()');
+      console.log('  → Would call AssetService.listAllAssets()');
+      console.log('  → Would GET gs://your-bucket/trees/ and gs://your-bucket/signs/');
+      return [
+        { id: 'tree-oak-001',       type: 'tree', name: 'Heritage Oak — Riverside',       dateUploaded: '2025-01-14' },
+        { id: 'tree-maple-002',     type: 'tree', name: 'Red Maple — North Trail',         dateUploaded: '2025-02-03' },
+        { id: 'sign-trailhead-001', type: 'sign', name: 'Trailhead Marker — East Entrance',dateUploaded: '2025-02-10' },
+        { id: 'sign-info-002',      type: 'sign', name: 'Info Kiosk — Visitor Center',     dateUploaded: '2025-03-01' },
+        { id: 'tree-pine-003',      type: 'tree', name: 'Longleaf Pine — South Ridge',     dateUploaded: '2025-03-15' },
+      ];
+    },
+
+    serverUploadAsset(assetData) {
+      console.log('[ServerBridge stub] serverUploadAsset()', assetData);
+      //console.log(`  → Would call AssetService.uploadAsset({ id: "${assetData.id}", type: "${assetData.type}" })`);
+      //console.log(`  → Would upload files to gs://your-bucket/${assetData.type}s/${assetData.id}/`);
+      //console.log('  → Would update master-hash.json and append to changelog.json');
+      return { success: true, assetId: assetData.id, errors: [] };
+    },
+
+    serverDeleteAsset(id, type, name) {
+      console.log(`[ServerBridge stub] serverDeleteAsset("${id}", "${type}", "${name}")`);
+      //console.log(`  → Would call AssetService.deleteAsset("${id}", "${type}")`);
+      //console.log(`  → Would DELETE all objects under gs://your-bucket/${type}s/${id}/`);
+      //console.log('  → Would update master-hash.json and append to changelog.json');
+      return { success: true };
+    },
+
+    serverEditAsset(id, type, updates) {
+      console.log(`[ServerBridge stub] serverEditAsset("${id}", "${type}")`, updates);
+      //console.log(`  → Would call AssetService.editAsset("${id}", "${type}", updates)`);
+      //console.log(`  → Would overwrite changed files in gs://your-bucket/${type}s/${id}/`);
+      //console.log('  → Would update master-hash.json and append to changelog.json');
+      return { success: true };
+    },
+  };
+
+  return {
+    getAuthUrl:  ()                    => _run('serverGetAuthUrl'),
+    checkSession:()                    => _run('serverCheckSession'),
+    signOut:     ()                    => _run('serverSignOut'),
+    listAssets:  ()                    => _run('serverListAssets'),
+    uploadAsset: (data)                => _run('serverUploadAsset', data),
+    deleteAsset: (id, type, name)      => _run('serverDeleteAsset', id, type, name),
+    editAsset:   (id, type, updates)   => _run('serverEditAsset', id, type, updates),
+  };
+})();
+
+/* ════════════════════════════════════════════════════════════════════
+   Toast notification utility
+══════════════════════════════════════════════════════════════════════ */
+const Toast = {
+  show(message, type = 'info', duration = 3500) {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = message;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => el.remove(), duration);
+  },
+  success: (msg) => Toast.show(msg, 'success'),
+  error:   (msg) => Toast.show(msg, 'error'),
+  info:    (msg) => Toast.show(msg, 'info'),
+};
+
+/* ════════════════════════════════════════════════════════════════════
+   App namespace — all feature modules
+══════════════════════════════════════════════════════════════════════ */
+window.App = {};
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Auth
+   ─────────────────────────────────────────────────────────────────
+   Manages the Google OAuth2 popup flow.
+
+   loginWithGoogle():
+     1. Calls google.script.run.serverGetAuthUrl() to get the auth URL
+     2. Opens it in a small popup window
+     3. Listens for the AUTH_SUCCESS postMessage from the popup
+     4. On success, calls google.script.run.serverCheckSession() to
+        retrieve the user and transition to the home page
+──────────────────────────────────────────────────────────────────── */
+App.Auth = (() => {
+  let _currentUser = null;
+  let _authPopup   = null;
+  let _pollTimer   = null;
+
+  function _showApp(user) {
+    _currentUser = user;
+    document.getElementById('login-overlay').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    document.getElementById('user-name').textContent = user.name || user.email;
+    App.Table.load();
+  }
+
+  function _showLoginError(msg) {
+    const el = document.getElementById('login-error');
+    document.getElementById('login-error-msg').textContent = msg;
+    el.classList.add('visible');
+  }
+
+  function _resetLoginBtn() {
+    const btn   = document.getElementById('google-login-btn');
+    const label = document.getElementById('google-btn-label');
+    btn.disabled  = false;
+    label.textContent = 'Continue with Google';
+  }
+
+  /**
+   * Initiates the Google OAuth2 login flow.
+   *
+   * Step 1: Ask the server for the auth URL (Auth.gs → serverGetAuthUrl).
+   * Step 2: Open it in a popup window.
+   * Step 3: Listen for AUTH_SUCCESS postMessage from the popup page.
+   * Step 4: Poll serverCheckSession() to get the verified user object.
+   */
+  async function loginWithGoogle() {
+    const btn   = document.getElementById('google-login-btn');
+    const label = document.getElementById('google-btn-label');
+    btn.disabled      = true;
+    label.textContent = 'Opening sign-in…';
+    document.getElementById('login-error').classList.remove('visible');
+
+    console.log('[Auth] loginWithGoogle() — requesting auth URL from server');
+
+    let authUrl;
+    try {
+      authUrl = await ServerBridge.getAuthUrl();
+    } catch (err) {
+      console.error('[Auth] Failed to get auth URL:', err);
+      _showLoginError('Could not reach the authentication server. Please try again.');
+      _resetLoginBtn();
+      return;
+    }
+
+    console.log(`[Auth] Auth URL received: ${authUrl}`);
+
+    // ── Stub path: __STUB_AUTH__ means APIs aren't wired yet ──────────────
+    if (authUrl === '__STUB_AUTH__') {
+      console.log('[Auth] STUB: skipping real popup, calling serverCheckSession() directly');
+      label.textContent = 'Verifying…';
+      const session = await ServerBridge.checkSession();
+      if (session.authenticated) {
+        _showApp(session.user);
+        Toast.success(`Welcome, ${session.user.name}!`);
+      } else {
+        _showLoginError('Authentication failed. Please try again.');
+        _resetLoginBtn();
+      }
+      return;
+    }
+
+    // ── Production path: open the real Google OAuth URL in a popup ─────────
+    const popupWidth  = 520;
+    const popupHeight = 640;
+    const left   = Math.round(window.screenX + (window.outerWidth  - popupWidth)  / 2);
+    const top    = Math.round(window.screenY + (window.outerHeight - popupHeight) / 2);
+    const params = `width=${popupWidth},height=${popupHeight},left=${left},top=${top},` +
+                   `scrollbars=yes,resizable=yes,toolbar=no,menubar=no`;
+
+    _authPopup = window.open(authUrl, 'httapp_google_auth', params);
+
+    if (!_authPopup || _authPopup.closed) {
+      _showLoginError('The sign-in popup was blocked. Please allow popups for this site.');
+      _resetLoginBtn();
+      return;
+    }
+
+    label.textContent = 'Waiting for Google…';
+    console.log('[Auth] Popup opened, waiting for AUTH_SUCCESS postMessage');
+
+    // Listen for the postMessage sent by authCallback()'s success page (Auth.gs)
+    function _onMessage(event) {
+      if (event.data !== 'AUTH_SUCCESS') return;
+      console.log('[Auth] AUTH_SUCCESS received from popup');
+      window.removeEventListener('message', _onMessage);
+      clearInterval(_pollTimer);
+      _handleAuthSuccess();
+    }
+    window.addEventListener('message', _onMessage);
+
+    // Fallback: poll for popup closure in case postMessage is blocked
+    _pollTimer = setInterval(() => {
+      if (_authPopup && _authPopup.closed) {
+        clearInterval(_pollTimer);
+        window.removeEventListener('message', _onMessage);
+        console.log('[Auth] Popup closed — polling serverCheckSession() as fallback');
+        _handleAuthSuccess();
+      }
+    }, 800);
+  }
+
+  /** Called when the popup signals success (or closes). Verifies the session. */
+  async function _handleAuthSuccess() {
+    const label = document.getElementById('google-btn-label');
+    label.textContent = 'Verifying…';
+
+    try {
+      const session = await ServerBridge.checkSession();
+      if (session && session.authenticated) {
+        _showApp(session.user);
+        Toast.success(`Welcome, ${session.user.name}!`);
+      } else {
+        _showLoginError('Authentication was not completed. Please try again.');
+        _resetLoginBtn();
+      }
+    } catch (err) {
+      console.error('[Auth] serverCheckSession() failed:', err);
+      _showLoginError('Session verification failed. Please try again.');
+      _resetLoginBtn();
+    }
+  }
+
+  async function signOut() {
+    await ServerBridge.signOut();
+    _currentUser = null;
+    document.getElementById('app').classList.remove('visible');
+    document.getElementById('login-overlay').classList.remove('hidden');
+    document.getElementById('login-error').classList.remove('visible');
+    _resetLoginBtn();
+    Toast.info('Signed out successfully.');
+  }
+
+  function getUser() { return _currentUser; }
+
+  return { loginWithGoogle, signOut, getUser };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Table — asset list rendering, filtering, options menu
+──────────────────────────────────────────────────────────────────── */
+App.Table = (() => {
+  let _assets    = [];
+  let _activeMenu = null;
+
+  function _typebadge(type) {
+    return `<span class="badge badge-${type}">${type}</span>`;
+  }
+
+  function _formatDate(iso) {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function _renderRows(assets) {
+    const tbody = document.getElementById('asset-tbody');
+    if (assets.length === 0) {
+      tbody.innerHTML = `
+      <tr><td colspan="5" class="table-empty">
+        <div class="empty-icon">◫</div>
+        <div>No assets found</div>
+      </td></tr>`;
+      return;
+    }
+    tbody.innerHTML = assets.map((a) => `
+      <tr data-id="${a.id}" data-type="${a.type}" data-name="${a.name}">
+        <td class="col-id">${a.id}</td>
+        <td>${_typebadge(a.type)}</td>
+        <td>${a.name}</td>
+        <td class="mono muted" style="font-size:12px">${_formatDate(a.dateUploaded)}</td>
+        <td class="col-actions">
+          <div class="options-menu-wrapper">
+            <button class="btn-icon" title="Options"
+              onclick="App.Table.toggleMenu(event, '${a.id}', '${a.type}', '${a.name.replace(/'/g,"\\'")}')">⋯</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+    document.getElementById('asset-count').textContent = `${assets.length} asset${assets.length !== 1 ? 's' : ''}`;
+  }
+
+  function closeAllMenus() {
+    if (_activeMenu) { _activeMenu.remove(); _activeMenu = null; }
+  }
+
+  function toggleMenu(event, id, type, name) {
+    event.stopPropagation();
+    if (_activeMenu) { closeAllMenus(); return; }
+
+    const btn = event.currentTarget;
+    const wrapper = btn.closest('.options-menu-wrapper');
+
+    const menu = document.createElement('div');
+    menu.className = 'options-dropdown';
+    menu.innerHTML = `
+      <button class="menu-item" onclick="App.Upload.openEdit('${id}','${type}','${name.replace(/'/g,"\\'")}')">Edit</button>
+      <div class="menu-divider"></div>
+      <button class="menu-item danger" onclick="App.Delete.open('${id}','${type}','${name.replace(/'/g,"\\'")}')">Delete</button>
+    `;
+    wrapper.appendChild(menu);
+    _activeMenu = menu;
+
+    // Click outside closes
+    setTimeout(() => document.addEventListener('click', closeAllMenus, { once: true }), 10);
+  }
+
+  async function load() {
+    const tbody = document.getElementById('asset-tbody');
+    tbody.innerHTML = `<tr><td colspan="5" class="table-empty"><div>Loading assets…</div></td></tr>`;
+    _assets = await ServerBridge.listAssets();
+    filter();
+  }
+
+  function filter() {
+    const q    = document.getElementById('search-input').value.toLowerCase();
+    const type = document.getElementById('type-filter').value;
+    const filtered = _assets.filter((a) => {
+      const matchType = type === 'all' || a.type === type;
+      const matchQ    = !q || a.id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q);
+      return matchType && matchQ;
+    });
+    _renderRows(filtered);
+  }
+
+  function addAsset(asset) {
+    _assets.unshift(asset);
+    filter();
+  }
+
+  function removeAsset(id) {
+    _assets = _assets.filter((a) => a.id !== id);
+    filter();
+  }
+
+  function updateAsset(updated) {
+    const idx = _assets.findIndex((a) => a.id === updated.id);
+    if (idx >= 0) _assets[idx] = { ..._assets[idx], ...updated };
+    filter();
+  }
+
+  return { load, filter, addAsset, removeAsset, updateAsset, toggleMenu, closeAllMenus };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Upload — upload / edit modal
+──────────────────────────────────────────────────────────────────── */
+App.Upload = (() => {
+  let _mode      = 'upload';   // 'upload' | 'edit'
+  let _editId    = null;
+  let _editType  = null;
+  let _files     = {};          // { thumbnail, description, geometry, gallery: [] }
+  let _galleryImages = [];
+
+  const CHECKLIST_ITEMS = {
+    tree: [
+      { key: 'thumbnail',   label: 'thumbnail.jpg' },
+      { key: 'description', label: 'description.md' },
+      { key: 'geometry',    label: 'geometry.geojson' },
+      { key: 'gallery',     label: 'gallery images' },
+    ],
+    sign: [
+      { key: 'thumbnail',   label: 'thumbnail.jpg' },
+      { key: 'description', label: 'description.md' },
+      { key: 'geometry',    label: 'geometry.geojson' },
+    ],
+  };
+
+  function _reset() {
+    _files = { gallery: [] };
+    _galleryImages = [];
+    document.getElementById('upload-id').value    = '';
+    document.getElementById('upload-name').value  = '';
+    document.getElementById('upload-type').value  = 'tree';
+    document.getElementById('md-editor').value    = '';
+    document.getElementById('md-preview').innerHTML = '';
+    document.getElementById('geojson-filename').textContent = 'Drop geometry.geojson or click to browse';
+    document.getElementById('thumb-preview-img').style.display = 'none';
+    document.getElementById('thumb-placeholder').style.display = 'flex';
+    _renderGallery();
+    _renderChecklist();
+    onTypeChange();
+  }
+
+  function open() {
+    _mode = 'upload'; _editId = null; _editType = null;
+    _reset();
+    document.getElementById('upload-modal-title').textContent = 'Upload New Asset';
+    document.getElementById('upload-submit-label').textContent = '⬆ Verify + Upload';
+    document.getElementById('upload-overlay').classList.remove('hidden');
+  }
+
+  function openEdit(id, type, name) {
+    App.Table.closeAllMenus();
+    _mode = 'edit'; _editId = id; _editType = type;
+    _reset();
+    document.getElementById('upload-modal-title').textContent = `Edit Asset — ${id}`;
+    document.getElementById('upload-submit-label').textContent = '✓ Save Changes';
+    document.getElementById('upload-id').value   = id;
+    document.getElementById('upload-name').value = name;
+    document.getElementById('upload-type').value = type;
+    document.getElementById('upload-type').disabled = true;
+    onTypeChange();
+    document.getElementById('upload-overlay').classList.remove('hidden');
+  }
+
+  function close() {
+    document.getElementById('upload-overlay').classList.add('hidden');
+    document.getElementById('upload-type').disabled = false;
+    _reset();
+  }
+
+  function onTypeChange() {
+    const type = document.getElementById('upload-type').value;
+    const gallerySection = document.getElementById('gallery-section');
+    if (type === 'tree') {
+      gallerySection.classList.remove('hidden');
+    } else {
+      gallerySection.classList.add('hidden');
+      _galleryImages = []; _files.gallery = [];
+      _renderGallery();
+    }
+    _renderChecklist();
+  }
+
+  function onFileSelect(key, input) {
+    const file = input.files[0];
+    if (!file) return;
+    _files[key] = file;
+
+    if (key === 'thumbnail') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        document.getElementById('thumb-preview-img').src = e.target.result;
+        document.getElementById('thumb-preview-img').style.display = 'block';
+        document.getElementById('thumb-placeholder').style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+    if (key === 'geometry') {
+      document.getElementById('geojson-filename').textContent = `✓ ${file.name}`;
+    }
+    if (key === 'description') {
+      const reader = new FileReader();
+      reader.onload = (e) => { document.getElementById('md-editor').value = e.target.result; };
+      reader.readAsText(file);
+    }
+    _renderChecklist();
+  }
+
+  function addGalleryImages(fileList) {
+    for (const f of fileList) {
+      _galleryImages.push(f);
+      _files.gallery = _galleryImages;
+    }
+    _renderGallery();
+    _renderChecklist();
+  }
+
+  function _removeGalleryImage(index) {
+    _galleryImages.splice(index, 1);
+    _files.gallery = _galleryImages;
+    _renderGallery();
+    _renderChecklist();
+  }
+
+  function _renderGallery() {
+    const carousel = document.getElementById('gallery-carousel');
+    const count    = document.getElementById('gallery-count');
+    count.textContent = `${_galleryImages.length} image${_galleryImages.length !== 1 ? 's' : ''}`;
+
+    // Re-render all thumbnails
+    const addBtn = carousel.querySelector('.gallery-add-btn');
+    // Remove old thumb elements
+    carousel.querySelectorAll('.gallery-thumb').forEach((el) => el.remove());
+
+    _galleryImages.forEach((file, idx) => {
+      const reader = new FileReader();
+      const thumb  = document.createElement('div');
+      thumb.className = 'gallery-thumb';
+      thumb.innerHTML = `<img><button class="gallery-thumb-remove" onclick="App.Upload._removeGalleryImage(${idx})" title="Remove">✕</button>`;
+      reader.onload = (e) => thumb.querySelector('img').src = e.target.result;
+      reader.readAsDataURL(file);
+      carousel.insertBefore(thumb, addBtn);
+    });
+  }
+
+  function _renderChecklist() {
+    const type  = document.getElementById('upload-type').value;
+    const items = CHECKLIST_ITEMS[type] || CHECKLIST_ITEMS.sign;
+    const body  = document.getElementById('checklist-body');
+
+    body.innerHTML = items.map(({ key, label }) => {
+      const isDone = key === 'gallery' ? _galleryImages.length > 0 : !!_files[key];
+      const cls    = isDone ? 'done' : '';
+      const icon   = isDone ? '✓' : '⊘';
+      return `
+        <div class="checklist-item ${cls}" data-key="${key}">
+          <span class="ci-name">${label}</span>
+          <div class="ci-status">${icon}</div>
+        </div>`;
+    }).join('');
+
+    // Allow clicking a checklist item to trigger its file input
+    body.querySelectorAll('.checklist-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const key = item.dataset.key;
+        if (key === 'gallery') document.getElementById('gallery-file-input').click();
+        else if (key === 'thumbnail') document.querySelector('#thumb-preview-area input').click();
+        else if (key === 'geometry') document.querySelector('#geojson-dropzone input').click();
+        else if (key === 'description') {
+          document.getElementById('md-tab-edit').click();
+          document.getElementById('md-editor').focus();
+        }
+      });
+    });
+  }
+
+  function onMdEdit() {
+    // Live sync to description file stub
+    _files.description = new Blob([document.getElementById('md-editor').value], { type: 'text/markdown' });
+    _renderChecklist();
+  }
+
+  function switchMdTab(tab) {
+    const editor   = document.getElementById('md-editor');
+    const preview  = document.getElementById('md-preview');
+    const tabEdit  = document.getElementById('md-tab-edit');
+    const tabPrev  = document.getElementById('md-tab-preview');
+
+    if (tab === 'preview') {
+      editor.style.display  = 'none';
+      preview.style.display = 'block';
+      preview.innerHTML     = _mdToHtml(editor.value);
+      tabEdit.classList.remove('active');
+      tabPrev.classList.add('active');
+    } else {
+      editor.style.display  = 'block';
+      preview.style.display = 'none';
+      tabEdit.classList.add('active');
+      tabPrev.classList.remove('active');
+    }
+  }
+
+  function _mdToHtml(md) {
+    // Simple markdown converter (no deps)
+    return md
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g,    '<em>$1</em>')
+      .replace(/`(.+?)`/g,      '<code>$1</code>')
+      .replace(/\n\n/g,         '</p><p>')
+      .replace(/^(?!<[h1-6]|<\/p>)(.+)$/gm, '<p>$1</p>')
+      || '<p class="muted">Nothing to preview yet.</p>';
+  }
+
+  async function submit() {
+    const id   = document.getElementById('upload-id').value.trim();
+    const name = document.getElementById('upload-name').value.trim();
+    const type = document.getElementById('upload-type').value;
+
+    if (!id)   { Toast.error('Asset ID is required.');   return; }
+    if (!name) { Toast.error('Asset Name is required.'); return; }
+
+    // Show loading
+    document.getElementById('upload-spinner').classList.add('visible');
+    document.getElementById('upload-submit-btn').disabled = true;
+    document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? 'Saving…' : 'Uploading…';
+
+    if (_mode === 'upload') {
+      const result = await ServerBridge.uploadAsset({
+        id, type, name,
+        files: {
+          thumbnail:   _files.thumbnail || null,
+          description: _files.description || null,
+          geometry:    _files.geometry || null,
+          gallery:     _galleryImages,
+        },
+      });
+
+      if (result.success) {
+        App.Table.addAsset({ id, type, name, dateUploaded: new Date().toISOString().split('T')[0] });
+        Toast.success(`Asset "${name}" uploaded successfully.`);
+        close();
+      } else {
+        Toast.error('Upload failed: ' + (result.errors?.join(', ') || 'Unknown error'));
+      }
+    } else {
+      // Edit mode
+      const result = await ServerBridge.editAsset(_editId, _editType, {
+        name,
+        thumbnail:   _files.thumbnail,
+        description: _files.description,
+        geometry:    _files.geometry,
+        gallery:     _galleryImages.length > 0 ? _galleryImages : undefined,
+      });
+      if (result.success) {
+        App.Table.updateAsset({ id: _editId, name });
+        Toast.success(`Asset "${name}" updated successfully.`);
+        close();
+      } else {
+        Toast.error('Save failed.');
+      }
+    }
+
+    // Reset button
+    document.getElementById('upload-spinner').classList.remove('visible');
+    document.getElementById('upload-submit-btn').disabled = false;
+    document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
+  }
+
+  return { open, openEdit, close, onTypeChange, onFileSelect, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Delete — delete confirmation modal
+──────────────────────────────────────────────────────────────────── */
+App.Delete = (() => {
+  let _id = null, _type = null, _name = null;
+
+  function open(id, type, name) {
+    App.Table.closeAllMenus();
+    _id = id; _type = type; _name = name;
+    document.getElementById('delete-desc').innerHTML =
+      `Are you sure you want to delete <strong>${name}</strong> (<code class="mono" style="font-size:11px">${id}</code>)?
+      All associated files will be permanently removed from Google Cloud Storage.
+      <br><br><span style="color:var(--warn)">⚠ This action cannot be undone.</span>`;
+    document.getElementById('delete-overlay').classList.remove('hidden');
+  }
+
+  function close() {
+    document.getElementById('delete-overlay').classList.add('hidden');
+    _id = null; _type = null; _name = null;
+  }
+
+  async function confirm() {
+    document.getElementById('delete-spinner').classList.add('visible');
+    document.getElementById('delete-confirm-btn').disabled = true;
+    document.getElementById('delete-confirm-label').textContent = 'Deleting…';
+
+    const result = await ServerBridge.deleteAsset(_id, _type, _name);
+
+    document.getElementById('delete-spinner').classList.remove('visible');
+    document.getElementById('delete-confirm-btn').disabled = false;
+    document.getElementById('delete-confirm-label').textContent = 'Delete Asset';
+
+    if (result.success) {
+      App.Table.removeAsset(_id);
+      Toast.success(`Asset "${_name}" deleted.`);
+      close();
+    } else {
+      Toast.error('Delete failed. Please try again.');
+    }
+  }
+
+  return { open, close, confirm };
+})();
+
+/**
+ * Global event handlers
+ * These manage button clicks, drag-over styling, etc.
+ * 
+ */
+// Close overlays on backdrop click
+document.getElementById('upload-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.Upload.close();
+});
+document.getElementById('delete-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.Delete.close();
+});
+
+// Drag-over styling for drop zones
+document.querySelectorAll('.drop-zone').forEach((zone) => {
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    const input = zone.querySelector('input[type="file"]');
+    if (input && e.dataTransfer.files.length) {
+      // Simulate file input
+      Object.defineProperty(input, 'files', { value: e.dataTransfer.files, writable: false });
+      input.dispatchEvent(new Event('change'));
+    }
+  });
+});
+
+
+function onSuccess() {
+  console.log("Success!");
+}
+
+function onFailure() {
+  console.log("Failure!");
+}
+
+document.getElementById('google-login-btn').addEventListener('click', (event) => {
+  App.Auth.loginWithGoogle();
+  /*
+  google.script.run
+    .withSuccessHandler(onSuccess)
+    .withFailureHandler(onFailure)
+    .commTest('[loginWithGoogle] called server function!');
+    */
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   Boot
+══════════════════════════════════════════════════════════════════════ */
+(function init() {
+  console.log('[App] HTTapp Asset Manager initialising…');
+  // The app starts on the login overlay (shown by default).
+  // App.Auth.loginWithGoogle() or App.Auth.login() will transition to the home page.
+})();
+</script>
+</body>
+</html>
