@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTTapp Asset Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- All styles live in Styles.html, included here via the GAS templating engine -->
+<?!= include('Styles'); ?>
+
+</head>
+<body>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  TOAST CONTAINER                                               ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="toast-container"></div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  LOGIN OVERLAY                                                 ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="login-overlay" class="overlay">
+  <div id="login-modal" class="modal">
+
+    <div class="login-logo">
+      <div class="login-logo-mark">HA</div>
+      <div>
+        <div class="login-title">HTTapp Asset Manager</div>
+        <div class="login-subtitle">Secure asset management portal</div>
+      </div>
+    </div>
+
+    <!-- Error banner (shown on failed / blocked auth) -->
+    <div id="login-error">
+      <strong>Sign-in failed.</strong> <span id="login-error-msg">Please try again.</span>
+    </div>
+
+    <!-- Google sign-in button -->
+    <!--
+      WHY onclick calls App.Auth.loginWithGoogle() via google.script.run:
+      ─────────────────────────────────────────────────────────────────────
+      In a GAS Web App, OAuth2 cannot be initiated purely client-side.
+      The auth URL must be built server-side (Auth.gs → serverGetAuthUrl()),
+      then the client opens it in a small popup window.
+
+      Flow:
+        1. User clicks this button
+        2. Client calls google.script.run.serverGetAuthUrl()
+        3. Server returns the Google OAuth2 authorization URL
+        4. Client opens that URL in a popup (window.open)
+        5. User approves in the popup
+        6. Google redirects to the GAS /exec URL with ?code=...
+        7. doGet() in Code.gs detects ?code= and routes to authCallback()
+        8. authCallback() in Auth.gs exchanges the code, stores the session,
+           then posts AUTH_SUCCESS to window.opener and self-closes
+        9. The main window receives AUTH_SUCCESS (postMessage listener),
+           calls google.script.run.serverCheckSession() to get the user,
+           and transitions to the home page
+    -->
+    <button class="google-btn" id="google-login-btn" onclick="App.Auth.loginWithGoogle()">
+      <svg class="google-icon" viewBox="0 0 24 24" aria-hidden="true">
+        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+      </svg>
+      <span id="google-btn-label">Continue with Google</span>
+    </button>
+
+    <p class="login-footer-note">
+      You will be redirected to Google to authenticate.<br>
+      Only authorized Google accounts may access this portal.
+    </p>
+
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  MAIN APP                                                      ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="app">
+
+  <!-- HEADER -->
+  <header id="header">
+    <div class="header-brand">
+      <div class="header-logo-mark">HA</div>
+      <span class="header-title">HTTapp Asset Manager</span>
+    </div>
+    <div class="header-actions">
+      <div class="user-chip">
+        <div class="user-dot"></div>
+        <span id="user-name">—</span>
+      </div>
+      <button class="btn btn-primary" onclick="App.Upload.open()">
+        ⬆ Upload Asset
+      </button>
+      <button class="btn btn-ghost" onclick="App.Auth.signOut()">
+        Sign Out
+      </button>
+    </div>
+  </header>
+
+  <!-- BODY -->
+  <main id="main">
+    <div class="toolbar">
+      <div class="toolbar-left">
+        <span class="section-title">Assets</span>
+        <input type="text" class="search-input" id="search-input"
+          placeholder="Search by name or ID…" oninput="App.Table.filter()">
+        <select class="filter-select" id="type-filter" onchange="App.Table.filter()">
+          <option value="all">All Types</option>
+          <option value="tree">tree</option>
+          <option value="sign">sign</option>
+        </select>
+      </div>
+      <span id="asset-count" class="mono muted" style="font-size:11px;"></span>
+    </div>
+
+    <div class="table-container">
+      <table id="asset-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Type</th>
+            <th>Name</th>
+            <th>Date Uploaded</th>
+            <th class="col-actions"></th>
+          </tr>
+        </thead>
+        <tbody id="asset-tbody">
+          <tr>
+            <td colspan="5" class="table-empty">
+              <div class="empty-icon">◫</div>
+              <div>Loading assets…</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  UPLOAD / EDIT MODAL                                           ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="upload-overlay" class="overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="upload-modal-title">Upload New Asset</span>
+      <button class="btn-icon" onclick="App.Upload.close()" title="Close">✕</button>
+    </div>
+
+    <div class="modal-body">
+
+      <!-- ─── LEFT COLUMN ──────────────────────────────────────── -->
+      <div class="upload-left">
+
+        <!-- Gallery carousel (hidden for sign type) -->
+        <div class="gallery-section" id="gallery-section">
+          <div class="gallery-header">
+            <span class="gallery-label">Image Gallery Carousel</span>
+            <span class="gallery-count" id="gallery-count">0 images</span>
+          </div>
+          <div class="gallery-carousel" id="gallery-carousel">
+            <button class="gallery-add-btn"
+              onclick="document.getElementById('gallery-file-input').click()"
+              title="Add gallery image">
+              <span class="plus">+</span>
+              <span>Add</span>
+            </button>
+            <input type="file" id="gallery-file-input" accept="image/*" multiple
+              style="display:none" onchange="App.Upload.addGalleryImages(this.files)">
+          </div>
+        </div>
+
+        <!-- Asset properties -->
+        <div class="props-section">
+          <div class="props-title">Asset Properties</div>
+          <div class="props-inner">
+            <div>
+              <label>Asset Type</label>
+              <select class="select" id="upload-type" onchange="App.Upload.onTypeChange()">
+                <option value="tree">tree</option>
+                <option value="sign">sign</option>
+              </select>
+            </div>
+            <div>
+              <label>Asset ID <span style="text-transform:none;font-weight:400;letter-spacing:0">(unique slug)</span></label>
+              <input type="text" class="input" id="upload-id" placeholder="e.g. tree-oak-001">
+            </div>
+            <div>
+              <label>Asset Name</label>
+              <input type="text" class="input" id="upload-name" placeholder="e.g. Heritage Oak — Riverside">
+            </div>
+            <div>
+              <label>GeoJSON Geometry</label>
+              <div class="drop-zone" id="geojson-dropzone">
+                <span class="dz-icon">⌖</span>
+                <span id="geojson-filename">Drop geometry.geojson or click to browse</span>
+                <input type="file" accept=".geojson,application/json"
+                  onchange="App.Upload.onFileSelect('geometry', this)">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Markdown description editor -->
+        <div class="markdown-section">
+          <div class="markdown-header">
+            <span class="markdown-label">Markdown Preview</span>
+            <div class="markdown-tabs">
+              <button class="md-tab active" id="md-tab-edit"
+                onclick="App.Upload.switchMdTab('edit')">Edit</button>
+              <button class="md-tab" id="md-tab-preview"
+                onclick="App.Upload.switchMdTab('preview')">Preview</button>
+            </div>
+          </div>
+          <div class="markdown-content">
+            <textarea id="md-editor"
+              placeholder="# Asset Description&#10;&#10;Write your description in Markdown…"
+              oninput="App.Upload.onMdEdit()" rows="6"></textarea>
+            <div id="md-preview"></div>
+          </div>
+        </div>
+
+      </div><!-- /upload-left -->
+
+      <!-- ─── RIGHT COLUMN ─────────────────────────────────────── -->
+      <div class="upload-right">
+
+        <!-- Thumbnail image -->
+        <div class="thumb-section">
+          <div class="thumb-preview-area" id="thumb-preview-area">
+            <div class="thumb-placeholder" id="thumb-placeholder">
+              <span class="thumb-placeholder-icon">🖼</span>
+              <span>Click to upload</span>
+            </div>
+            <img id="thumb-preview-img" style="display:none" alt="Thumbnail preview">
+            <input type="file" accept="image/*"
+              onchange="App.Upload.onFileSelect('thumbnail', this)">
+          </div>
+          <div class="thumb-label">Thumbnail Image</div>
+        </div>
+
+        <!-- File checklist -->
+        <div class="checklist-section">
+          <div class="checklist-header">
+            <div class="checklist-title">File Checklist</div>
+            <div class="checklist-subtitle">Select an entry to upload file(s)</div>
+          </div>
+          <div class="checklist-body" id="checklist-body">
+            <!-- Populated dynamically by App.Upload._renderChecklist() -->
+          </div>
+        </div>
+
+      </div><!-- /upload-right -->
+    </div><!-- /modal-body -->
+
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="App.Upload.close()">Cancel</button>
+      <button class="btn btn-primary" id="upload-submit-btn" onclick="App.Upload.submit()">
+        <div class="spinner" id="upload-spinner"></div>
+        <span id="upload-submit-label">⬆ Verify + Upload</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  DELETE CONFIRM MODAL                                          ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="delete-overlay" class="overlay hidden">
+  <div class="modal">
+    <div class="delete-icon">🗑</div>
+    <div class="delete-title">Delete Asset</div>
+    <div class="delete-desc" id="delete-desc">
+      Are you sure? All associated files will be permanently removed from Google Cloud Storage.
+    </div>
+    <div class="delete-actions">
+      <button class="btn btn-ghost" onclick="App.Delete.close()">Cancel</button>
+      <button class="btn btn-danger" id="delete-confirm-btn" onclick="App.Delete.confirm()">
+        <div class="spinner" id="delete-spinner"></div>
+        <span id="delete-confirm-label">Delete Asset</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  CLIENT-SIDE JAVASCRIPT                                        ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════
+   ServerBridge
+   ─────────────────────────────────────────────────────────────────
+   Wraps every google.script.run call in a Promise.
+   Each public method corresponds to a server-side function defined
+   in one of the .gs files.
+
+   In iteration 1 the _stub() path is used so the UI can be tested
+   without a live GCS connection. When real APIs are wired up, simply
+   replace the setTimeout(..._stub...) line with the commented-out
+   google.script.run call in _run().
+══════════════════════════════════════════════════════════════════════ */
+const ServerBridge = (() => {
+
+  /**
+   * Wraps a google.script.run call in a Promise.
+   * Stub path is active for iteration 1.
+   */
+  function _run(fnName, ...args) {
+    return new Promise((resolve, reject) => {
+      console.log(`[ServerBridge] → ${fnName}(`, ...args, ')');
+
+      // ── PRODUCTION (uncomment when APIs are live): ─────────────
+      // google.script.run
+      //   .withSuccessHandler(resolve)
+      //   .withFailureHandler(reject)
+      //   [fnName](...args);
+
+      // ── STUB (iteration 1): ────────────────────────────────────
+      setTimeout(() => {
+        try { resolve(_stubs[fnName]?.(...args) ?? null); }
+        catch(e) { reject(e); }
+      }, 500);
+    });
+  }
+
+  // ── Stub response definitions ──────────────────────────────────
+  const _stubs = {
+
+    serverGetAuthUrl() {
+      console.log('[ServerBridge stub] serverGetAuthUrl()');
+      console.log('  → Would call Auth.gs AuthService.getAuthorizationUrl()');
+      console.log('  → Would return: https://accounts.google.com/o/oauth2/auth?client_id=...&redirect_uri=...&scope=openid+email+profile');
+      // Return a stub sentinel so the client popup flow can complete
+      return '__STUB_AUTH__';
+    },
+
+    serverCheckSession() {
+      console.log('[ServerBridge stub] serverCheckSession()');
+      console.log('  → Would call Auth.gs AuthService.checkSession()');
+      console.log('  → Would validate stored OAuth2 token in PropertiesService');
+      return { authenticated: true, user: { name: 'Dev User', email: 'dev.user@httapp.com' } };
+    },
+
+    serverSignOut() {
+      console.log('[ServerBridge stub] serverSignOut()');
+      console.log('  → Would call Auth.gs AuthService.signOut()');
+      console.log('  → Would POST https://oauth2.googleapis.com/revoke?token=<access_token>');
+      console.log('  → Would clear PropertiesService user session');
+      return { success: true };
+    },
+
+    serverListAssets() {
+      console.log('[ServerBridge stub] serverListAssets()');
+      console.log('  → Would call AssetService.listAllAssets()');
+      console.log('  → Would GET gs://your-bucket/trees/ and gs://your-bucket/signs/');
+      return [
+        { id: 'tree-oak-001',       type: 'tree', name: 'Heritage Oak — Riverside',       dateUploaded: '2025-01-14' },
+        { id: 'tree-maple-002',     type: 'tree', name: 'Red Maple — North Trail',         dateUploaded: '2025-02-03' },
+        { id: 'sign-trailhead-001', type: 'sign', name: 'Trailhead Marker — East Entrance',dateUploaded: '2025-02-10' },
+        { id: 'sign-info-002',      type: 'sign', name: 'Info Kiosk — Visitor Center',     dateUploaded: '2025-03-01' },
+        { id: 'tree-pine-003',      type: 'tree', name: 'Longleaf Pine — South Ridge',     dateUploaded: '2025-03-15' },
+      ];
+    },
+
+    serverUploadAsset(assetData) {
+      console.log('[ServerBridge stub] serverUploadAsset()', assetData);
+      console.log(`  → Would call AssetService.uploadAsset({ id: "${assetData.id}", type: "${assetData.type}" })`);
+      console.log(`  → Would upload files to gs://your-bucket/${assetData.type}s/${assetData.id}/`);
+      console.log('  → Would update master-hash.json and append to changelog.json');
+      return { success: true, assetId: assetData.id, errors: [] };
+    },
+
+    serverDeleteAsset(id, type, name) {
+      console.log(`[ServerBridge stub] serverDeleteAsset("${id}", "${type}", "${name}")`);
+      console.log(`  → Would call AssetService.deleteAsset("${id}", "${type}")`);
+      console.log(`  → Would DELETE all objects under gs://your-bucket/${type}s/${id}/`);
+      console.log('  → Would update master-hash.json and append to changelog.json');
+      return { success: true };
+    },
+
+    serverEditAsset(id, type, updates) {
+      console.log(`[ServerBridge stub] serverEditAsset("${id}", "${type}")`, updates);
+      console.log(`  → Would call AssetService.editAsset("${id}", "${type}", updates)`);
+      console.log(`  → Would overwrite changed files in gs://your-bucket/${type}s/${id}/`);
+      console.log('  → Would update master-hash.json and append to changelog.json');
+      return { success: true };
+    },
+  };
+
+  return {
+    getAuthUrl:  ()                    => _run('serverGetAuthUrl'),
+    checkSession:()                    => _run('serverCheckSession'),
+    signOut:     ()                    => _run('serverSignOut'),
+    listAssets:  ()                    => _run('serverListAssets'),
+    uploadAsset: (data)                => _run('serverUploadAsset', data),
+    deleteAsset: (id, type, name)      => _run('serverDeleteAsset', id, type, name),
+    editAsset:   (id, type, updates)   => _run('serverEditAsset', id, type, updates),
+  };
+})();
+
+/* ════════════════════════════════════════════════════════════════════
+   Toast
+══════════════════════════════════════════════════════════════════════ */
+const Toast = {
+  show(msg, type = 'info', duration = 3500) {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = msg;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => el.remove(), duration);
+  },
+  success: (m) => Toast.show(m, 'success'),
+  error:   (m) => Toast.show(m, 'error'),
+  info:    (m) => Toast.show(m, 'info'),
+};
+
+/* ════════════════════════════════════════════════════════════════════
+   App namespace
+══════════════════════════════════════════════════════════════════════ */
+const App = {};
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Auth
+   ─────────────────────────────────────────────────────────────────
+   Manages the Google OAuth2 popup flow.
+
+   loginWithGoogle():
+     1. Calls google.script.run.serverGetAuthUrl() to get the auth URL
+     2. Opens it in a small popup window
+     3. Listens for the AUTH_SUCCESS postMessage from the popup
+     4. On success, calls google.script.run.serverCheckSession() to
+        retrieve the user and transition to the home page
+──────────────────────────────────────────────────────────────────── */
+App.Auth = (() => {
+  let _currentUser = null;
+  let _authPopup   = null;
+  let _pollTimer   = null;
+
+  function _showApp(user) {
+    _currentUser = user;
+    document.getElementById('login-overlay').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    document.getElementById('user-name').textContent = user.name || user.email;
+    App.Table.load();
+  }
+
+  function _showLoginError(msg) {
+    const el = document.getElementById('login-error');
+    document.getElementById('login-error-msg').textContent = msg;
+    el.classList.add('visible');
+  }
+
+  function _resetLoginBtn() {
+    const btn   = document.getElementById('google-login-btn');
+    const label = document.getElementById('google-btn-label');
+    btn.disabled  = false;
+    label.textContent = 'Continue with Google';
+  }
+
+  /**
+   * Initiates the Google OAuth2 login flow.
+   *
+   * Step 1: Ask the server for the auth URL (Auth.gs → serverGetAuthUrl).
+   * Step 2: Open it in a popup window.
+   * Step 3: Listen for AUTH_SUCCESS postMessage from the popup page.
+   * Step 4: Poll serverCheckSession() to get the verified user object.
+   */
+  async function loginWithGoogle() {
+    const btn   = document.getElementById('google-login-btn');
+    const label = document.getElementById('google-btn-label');
+    btn.disabled      = true;
+    label.textContent = 'Opening sign-in…';
+    document.getElementById('login-error').classList.remove('visible');
+
+    console.log('[Auth] loginWithGoogle() — requesting auth URL from server');
+
+    let authUrl;
+    try {
+      authUrl = await ServerBridge.getAuthUrl();
+    } catch (err) {
+      console.error('[Auth] Failed to get auth URL:', err);
+      _showLoginError('Could not reach the authentication server. Please try again.');
+      _resetLoginBtn();
+      return;
+    }
+
+    console.log(`[Auth] Auth URL received: ${authUrl}`);
+
+    // ── Stub path: __STUB_AUTH__ means APIs aren't wired yet ──────────────
+    if (authUrl === '__STUB_AUTH__') {
+      console.log('[Auth] STUB: skipping real popup, calling serverCheckSession() directly');
+      label.textContent = 'Verifying…';
+      const session = await ServerBridge.checkSession();
+      if (session.authenticated) {
+        _showApp(session.user);
+        Toast.success(`Welcome, ${session.user.name}!`);
+      } else {
+        _showLoginError('Authentication failed. Please try again.');
+        _resetLoginBtn();
+      }
+      return;
+    }
+
+    // ── Production path: open the real Google OAuth URL in a popup ─────────
+    const popupWidth  = 520;
+    const popupHeight = 640;
+    const left   = Math.round(window.screenX + (window.outerWidth  - popupWidth)  / 2);
+    const top    = Math.round(window.screenY + (window.outerHeight - popupHeight) / 2);
+    const params = `width=${popupWidth},height=${popupHeight},left=${left},top=${top},` +
+                   `scrollbars=yes,resizable=yes,toolbar=no,menubar=no`;
+
+    _authPopup = window.open(authUrl, 'httapp_google_auth', params);
+
+    if (!_authPopup || _authPopup.closed) {
+      _showLoginError('The sign-in popup was blocked. Please allow popups for this site.');
+      _resetLoginBtn();
+      return;
+    }
+
+    label.textContent = 'Waiting for Google…';
+    console.log('[Auth] Popup opened, waiting for AUTH_SUCCESS postMessage');
+
+    // Listen for the postMessage sent by authCallback()'s success page (Auth.gs)
+    function _onMessage(event) {
+      if (event.data !== 'AUTH_SUCCESS') return;
+      console.log('[Auth] AUTH_SUCCESS received from popup');
+      window.removeEventListener('message', _onMessage);
+      clearInterval(_pollTimer);
+      _handleAuthSuccess();
+    }
+    window.addEventListener('message', _onMessage);
+
+    // Fallback: poll for popup closure in case postMessage is blocked
+    _pollTimer = setInterval(() => {
+      if (_authPopup && _authPopup.closed) {
+        clearInterval(_pollTimer);
+        window.removeEventListener('message', _onMessage);
+        console.log('[Auth] Popup closed — polling serverCheckSession() as fallback');
+        _handleAuthSuccess();
+      }
+    }, 800);
+  }
+
+  /** Called when the popup signals success (or closes). Verifies the session. */
+  async function _handleAuthSuccess() {
+    const label = document.getElementById('google-btn-label');
+    label.textContent = 'Verifying…';
+
+    try {
+      const session = await ServerBridge.checkSession();
+      if (session && session.authenticated) {
+        _showApp(session.user);
+        Toast.success(`Welcome, ${session.user.name}!`);
+      } else {
+        _showLoginError('Authentication was not completed. Please try again.');
+        _resetLoginBtn();
+      }
+    } catch (err) {
+      console.error('[Auth] serverCheckSession() failed:', err);
+      _showLoginError('Session verification failed. Please try again.');
+      _resetLoginBtn();
+    }
+  }
+
+  async function signOut() {
+    await ServerBridge.signOut();
+    _currentUser = null;
+    document.getElementById('app').classList.remove('visible');
+    document.getElementById('login-overlay').classList.remove('hidden');
+    document.getElementById('login-error').classList.remove('visible');
+    _resetLoginBtn();
+    Toast.info('Signed out successfully.');
+  }
+
+  function getUser() { return _currentUser; }
+
+  return { loginWithGoogle, signOut, getUser };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Table — asset list, search/filter, options menu
+──────────────────────────────────────────────────────────────────── */
+App.Table = (() => {
+  let _assets     = [];
+  let _activeMenu = null;
+
+  function _badge(type) {
+    return `<span class="badge badge-${type}">${type}</span>`;
+  }
+
+  function _formatDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' });
+  }
+
+  function _renderRows(assets) {
+    const tbody = document.getElementById('asset-tbody');
+    document.getElementById('asset-count').textContent =
+      `${assets.length} asset${assets.length !== 1 ? 's' : ''}`;
+
+    if (!assets.length) {
+      tbody.innerHTML = `<tr><td colspan="5" class="table-empty">
+        <div class="empty-icon">◫</div><div>No assets found</div></td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = assets.map((a) => `
+      <tr data-id="${a.id}">
+        <td class="col-id">${a.id}</td>
+        <td>${_badge(a.type)}</td>
+        <td>${a.name}</td>
+        <td class="mono muted" style="font-size:12px">${_formatDate(a.dateUploaded)}</td>
+        <td class="col-actions">
+          <div class="options-menu-wrapper">
+            <button class="btn-icon" title="Options"
+              onclick="App.Table.toggleMenu(event,'${a.id}','${a.type}','${a.name.replace(/'/g,"\\'")}')">
+              ⋯
+            </button>
+          </div>
+        </td>
+      </tr>`).join('');
+  }
+
+  function closeAllMenus() {
+    if (_activeMenu) { _activeMenu.remove(); _activeMenu = null; }
+  }
+
+  function toggleMenu(event, id, type, name) {
+    event.stopPropagation();
+    if (_activeMenu) { closeAllMenus(); return; }
+
+    const wrapper = event.currentTarget.closest('.options-menu-wrapper');
+    const menu = document.createElement('div');
+    menu.className = 'options-dropdown';
+    menu.innerHTML = `
+      <button class="menu-item"
+        onclick="App.Upload.openEdit('${id}','${type}','${name.replace(/'/g,"\\'")}')">
+        ✏ Edit
+      </button>
+      <div class="menu-divider"></div>
+      <button class="menu-item danger"
+        onclick="App.Delete.open('${id}','${type}','${name.replace(/'/g,"\\'")}')">
+        🗑 Delete
+      </button>`;
+    wrapper.appendChild(menu);
+    _activeMenu = menu;
+    setTimeout(() => document.addEventListener('click', closeAllMenus, { once: true }), 10);
+  }
+
+  async function load() {
+    document.getElementById('asset-tbody').innerHTML =
+      `<tr><td colspan="5" class="table-empty"><div>Loading assets…</div></td></tr>`;
+    _assets = await ServerBridge.listAssets();
+    filter();
+  }
+
+  function filter() {
+    const q    = document.getElementById('search-input').value.toLowerCase();
+    const type = document.getElementById('type-filter').value;
+    const out  = _assets.filter((a) =>
+      (type === 'all' || a.type === type) &&
+      (!q || a.id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q))
+    );
+    _renderRows(out);
+  }
+
+  function addAsset(a)    { _assets.unshift(a); filter(); }
+  function removeAsset(id){ _assets = _assets.filter((a) => a.id !== id); filter(); }
+  function updateAsset(u) {
+    const i = _assets.findIndex((a) => a.id === u.id);
+    if (i >= 0) _assets[i] = { ..._assets[i], ...u };
+    filter();
+  }
+
+  return { load, filter, addAsset, removeAsset, updateAsset, toggleMenu, closeAllMenus };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Upload — upload / edit modal
+──────────────────────────────────────────────────────────────────── */
+App.Upload = (() => {
+  let _mode    = 'upload';
+  let _editId  = null;
+  let _editType= null;
+  let _files   = {};
+  let _gallery = [];
+
+  const CHECKLIST = {
+    tree: [
+      { key:'thumbnail',   label:'thumbnail.jpg' },
+      { key:'description', label:'description.md' },
+      { key:'geometry',    label:'geometry.geojson' },
+      { key:'gallery',     label:'gallery images' },
+    ],
+    sign: [
+      { key:'thumbnail',   label:'thumbnail.jpg' },
+      { key:'description', label:'description.md' },
+      { key:'geometry',    label:'geometry.geojson' },
+    ],
+  };
+
+  function _reset() {
+    _files = { gallery: [] }; _gallery = [];
+    ['upload-id','upload-name'].forEach((id) => document.getElementById(id).value = '');
+    document.getElementById('upload-type').value = 'tree';
+    document.getElementById('md-editor').value   = '';
+    document.getElementById('md-preview').innerHTML = '';
+    document.getElementById('geojson-filename').textContent = 'Drop geometry.geojson or click to browse';
+    document.getElementById('thumb-preview-img').style.display  = 'none';
+    document.getElementById('thumb-placeholder').style.display  = 'flex';
+    _renderGallery(); _renderChecklist(); onTypeChange();
+  }
+
+  function open() {
+    _mode = 'upload'; _editId = _editType = null;
+    _reset();
+    document.getElementById('upload-modal-title').textContent   = 'Upload New Asset';
+    document.getElementById('upload-submit-label').textContent  = '⬆ Verify + Upload';
+    document.getElementById('upload-type').disabled = false;
+    document.getElementById('upload-overlay').classList.remove('hidden');
+  }
+
+  function openEdit(id, type, name) {
+    App.Table.closeAllMenus();
+    _mode = 'edit'; _editId = id; _editType = type;
+    _reset();
+    document.getElementById('upload-modal-title').textContent   = `Edit Asset — ${id}`;
+    document.getElementById('upload-submit-label').textContent  = '✓ Save Changes';
+    document.getElementById('upload-id').value   = id;
+    document.getElementById('upload-name').value = name;
+    document.getElementById('upload-type').value = type;
+    document.getElementById('upload-type').disabled = true;
+    onTypeChange();
+    document.getElementById('upload-overlay').classList.remove('hidden');
+  }
+
+  function close() {
+    document.getElementById('upload-overlay').classList.add('hidden');
+    document.getElementById('upload-type').disabled = false;
+  }
+
+  function onTypeChange() {
+    const type = document.getElementById('upload-type').value;
+    document.getElementById('gallery-section').classList.toggle('hidden', type !== 'tree');
+    if (type !== 'tree') { _gallery = []; _files.gallery = []; _renderGallery(); }
+    _renderChecklist();
+  }
+
+  function onFileSelect(key, input) {
+    const file = input.files[0];
+    if (!file) return;
+    _files[key] = file;
+    if (key === 'thumbnail') {
+      const r = new FileReader();
+      r.onload = (e) => {
+        document.getElementById('thumb-preview-img').src = e.target.result;
+        document.getElementById('thumb-preview-img').style.display = 'block';
+        document.getElementById('thumb-placeholder').style.display = 'none';
+      };
+      r.readAsDataURL(file);
+    }
+    if (key === 'geometry') {
+      document.getElementById('geojson-filename').textContent = `✓ ${file.name}`;
+    }
+    _renderChecklist();
+  }
+
+  function addGalleryImages(fileList) {
+    for (const f of fileList) _gallery.push(f);
+    _files.gallery = _gallery;
+    _renderGallery(); _renderChecklist();
+  }
+
+  function _removeGalleryImage(idx) {
+    _gallery.splice(idx, 1);
+    _files.gallery = _gallery;
+    _renderGallery(); _renderChecklist();
+  }
+
+  function _renderGallery() {
+    const carousel = document.getElementById('gallery-carousel');
+    document.getElementById('gallery-count').textContent =
+      `${_gallery.length} image${_gallery.length !== 1 ? 's' : ''}`;
+    carousel.querySelectorAll('.gallery-thumb').forEach((el) => el.remove());
+
+    const addBtn = carousel.querySelector('.gallery-add-btn');
+    _gallery.forEach((file, idx) => {
+      const thumb = document.createElement('div');
+      thumb.className = 'gallery-thumb';
+      thumb.innerHTML = `<img alt="Gallery ${idx+1}"><button class="gallery-thumb-remove"
+        onclick="App.Upload._removeGalleryImage(${idx})" title="Remove">✕</button>`;
+      const r = new FileReader();
+      r.onload = (e) => thumb.querySelector('img').src = e.target.result;
+      r.readAsDataURL(file);
+      carousel.insertBefore(thumb, addBtn);
+    });
+  }
+
+  function _renderChecklist() {
+    const type  = document.getElementById('upload-type').value;
+    const items = CHECKLIST[type] || CHECKLIST.sign;
+    const body  = document.getElementById('checklist-body');
+    body.innerHTML = items.map(({ key, label }) => {
+      const done = key === 'gallery' ? _gallery.length > 0 : !!_files[key];
+      return `<div class="checklist-item ${done ? 'done' : ''}" data-key="${key}">
+        <span class="ci-name">${label}</span>
+        <div class="ci-status">${done ? '✓' : '○'}</div>
+      </div>`;
+    }).join('');
+
+    body.querySelectorAll('.checklist-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const key = item.dataset.key;
+        if (key === 'gallery')     document.getElementById('gallery-file-input').click();
+        else if (key === 'thumbnail')  document.querySelector('#thumb-preview-area input').click();
+        else if (key === 'geometry')   document.querySelector('#geojson-dropzone input').click();
+        else if (key === 'description') { switchMdTab('edit'); document.getElementById('md-editor').focus(); }
+      });
+    });
+  }
+
+  function onMdEdit() {
+    _files.description = new Blob([document.getElementById('md-editor').value], { type: 'text/markdown' });
+    _renderChecklist();
+  }
+
+  function switchMdTab(tab) {
+    const editor  = document.getElementById('md-editor');
+    const preview = document.getElementById('md-preview');
+    const tabEdit = document.getElementById('md-tab-edit');
+    const tabPrev = document.getElementById('md-tab-preview');
+    const isPreview = tab === 'preview';
+    editor.style.display  = isPreview ? 'none' : 'block';
+    preview.style.display = isPreview ? 'block' : 'none';
+    if (isPreview) preview.innerHTML = _mdToHtml(editor.value);
+    tabEdit.classList.toggle('active', !isPreview);
+    tabPrev.classList.toggle('active', isPreview);
+  }
+
+  function _mdToHtml(md) {
+    return md
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g,   '<em>$1</em>')
+      .replace(/`(.+?)`/g,     '<code>$1</code>')
+      .replace(/\n\n/g, '</p><p>')
+      || '<p class="muted" style="color:var(--text-muted)">Nothing to preview yet.</p>';
+  }
+
+  async function submit() {
+    const id   = document.getElementById('upload-id').value.trim();
+    const name = document.getElementById('upload-name').value.trim();
+    const type = document.getElementById('upload-type').value;
+    if (!id)   { Toast.error('Asset ID is required.');   return; }
+    if (!name) { Toast.error('Asset Name is required.'); return; }
+
+    const spinner = document.getElementById('upload-spinner');
+    const btn     = document.getElementById('upload-submit-btn');
+    const lbl     = document.getElementById('upload-submit-label');
+    spinner.classList.add('visible'); btn.disabled = true;
+    lbl.textContent = _mode === 'edit' ? 'Saving…' : 'Uploading…';
+
+    let result;
+    if (_mode === 'upload') {
+      result = await ServerBridge.uploadAsset({ id, type, name, files: {
+        thumbnail: _files.thumbnail || null, description: _files.description || null,
+        geometry: _files.geometry || null, gallery: _gallery,
+      }});
+      if (result.success) {
+        App.Table.addAsset({ id, type, name, dateUploaded: new Date().toISOString().split('T')[0] });
+        Toast.success(`Asset "${name}" uploaded.`);
+        close();
+      } else {
+        Toast.error('Upload failed: ' + (result.errors?.join(', ') || 'Unknown error'));
+      }
+    } else {
+      result = await ServerBridge.editAsset(_editId, _editType, {
+        name,
+        thumbnail:   _files.thumbnail,
+        description: _files.description,
+        geometry:    _files.geometry,
+        gallery:     _gallery.length ? _gallery : undefined,
+      });
+      if (result.success) {
+        App.Table.updateAsset({ id: _editId, name });
+        Toast.success(`Asset "${name}" updated.`);
+        close();
+      } else {
+        Toast.error('Save failed. Please try again.');
+      }
+    }
+
+    spinner.classList.remove('visible'); btn.disabled = false;
+    lbl.textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
+  }
+
+  return { open, openEdit, close, onTypeChange, onFileSelect, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Delete — delete confirmation
+──────────────────────────────────────────────────────────────────── */
+App.Delete = (() => {
+  let _id = null, _type = null, _name = null;
+
+  function open(id, type, name) {
+    App.Table.closeAllMenus();
+    _id = id; _type = type; _name = name;
+    document.getElementById('delete-desc').innerHTML =
+      `Are you sure you want to delete <strong>${name}</strong>
+       (<code class="mono" style="font-size:11px;background:var(--surface3);
+       padding:1px 5px;border-radius:3px;border:1px solid var(--border)">${id}</code>)?
+       <br><br>All files will be permanently removed from Google Cloud Storage.
+       <span style="color:var(--warn);display:block;margin-top:8px">⚠ This cannot be undone.</span>`;
+    document.getElementById('delete-overlay').classList.remove('hidden');
+  }
+
+  function close() {
+    document.getElementById('delete-overlay').classList.add('hidden');
+    _id = _type = _name = null;
+  }
+
+  async function confirm() {
+    const spinner = document.getElementById('delete-spinner');
+    const btn     = document.getElementById('delete-confirm-btn');
+    const lbl     = document.getElementById('delete-confirm-label');
+    spinner.classList.add('visible'); btn.disabled = true; lbl.textContent = 'Deleting…';
+
+    const result = await ServerBridge.deleteAsset(_id, _type, _name);
+
+    spinner.classList.remove('visible'); btn.disabled = false; lbl.textContent = 'Delete Asset';
+
+    if (result.success) {
+      App.Table.removeAsset(_id);
+      Toast.success(`Asset "${_name}" deleted.`);
+      close();
+    } else {
+      Toast.error('Delete failed. Please try again.');
+    }
+  }
+
+  return { open, close, confirm };
+})();
+
+/* ════════════════════════════════════════════════════════════════════
+   Global event wiring
+══════════════════════════════════════════════════════════════════════ */
+
+// Close modals on backdrop click
+document.getElementById('upload-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.Upload.close();
+});
+document.getElementById('delete-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.Delete.close();
+});
+
+// Drag-over styling for file drop zones
+document.querySelectorAll('.drop-zone').forEach((zone) => {
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    const input = zone.querySelector('input[type="file"]');
+    if (input && e.dataTransfer.files.length) {
+      Object.defineProperty(input, 'files', { value: e.dataTransfer.files, configurable: true });
+      input.dispatchEvent(new Event('change'));
+    }
+  });
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   Boot
+══════════════════════════════════════════════════════════════════════ */
+(function init() {
+  console.log('[App] HTTapp Asset Manager ready — awaiting login');
+})();
+</script>
+</body>
+</html>
