@@ -20,13 +20,13 @@ class StorageService {
    * Object resource documentation: https://docs.cloud.google.com/storage/docs/json_api/v1/objects#resource
    * 
    * @param {string} prefix - e.g. "trees/" or "signs/"
-   * @returns {Array<Object>} List of object resource metadata stubs.
+   * @returns {Object} Parsed JSON response body
    */
   static listObjects(prefix) {
     console.log(`[StorageService.gs][listObjects] prefix: ${prefix}`);
 
     // create HTTP request url 
-    const url = `https://storage.googleapis.com/storage/v1/b/${CONFIG.BUCKET_NAME}/o?prefix=${prefix}`;
+    const url = `https://storage.googleapis.com/storage/v1/b/${CONFIG.BUCKET_NAME}/o?prefix=${prefix}&delimiter='/'`;
 
 
     const service = AuthService._getCloudService();
@@ -39,20 +39,19 @@ class StorageService {
 
     // use UrlFetchApp.fetch to send GET to GCS 
     console.log(`[StorageService.gs][listObjects] GET ${url}`);
-    var response = UrlFetchApp.fetch(url, {headers: { Authorization: 'Bearer ' + token }, 'muteHttpExceptions': true});
-    var code = response.getResponseCode();
+    var response = UrlFetchApp.fetch(url, {
+      headers: {
+        Authorization: 'Bearer ' + token
+      },
+      'muteHttpExceptions': true
+    });
 
-    if (code === 200) {
-      // parse the data and return the list of objects Resource
-      var json = response.getContentText();
-      var data = JSON.parse(json);
-      
-      return data['items'];
+    if (response.getResponseCode() !== 200) {
+      const errorText = response.getContentText();
+      throw new Error(`list failed: ${response.status} ${errorText}`);
     }
-
-    console.log(`[StorageService.gs][listObjects] response code other than 200! Code: ${code}`);
     
-    return null;
+    return JSON.parse(response.getContentText());
   }
 
   /**
@@ -62,13 +61,29 @@ class StorageService {
    * @param {string} mimeType   - MIME type of the file.
    */
   static uploadFile(objectPath, fileBlob, mimeType) {
+    console.log(`[StorageService.gs][uploadFile]`);
+
     const url = `https://storage.googleapis.com/upload/storage/v1/b/${CONFIG.BUCKET_NAME}/o?uploadType=multipart`;
-    console.log(`[StorageService.gs] UPLOAD FILE`);
-    console.log(`[StorageService.gs] API CALL (stubbed): POST ${url}`);
-    console.log(`[StorageService.gs]   → Object path : gs://${CONFIG.BUCKET_NAME}/${objectPath}`);
-    console.log(`[StorageService.gs]   → MIME type   : ${mimeType}`);
-    console.log(`[StorageService.gs]   → Would upload blob and return object metadata including md5Hash`);
-    return { objectPath, success: true, md5Hash: '<stub-md5-hash>' };
+    const token = service.getAccessToken();
+
+    // use UrlFetchApp.fetch to send GET to GCS 
+    console.log(`[StorageService.gs][uploadFile] POST ${url}`);
+    var response = UrlFetchApp.fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: 'Bearer ' + token
+      },
+      body: blob
+    });
+
+    if (!response.ok) {
+      const errorText = response.getContentText();
+      throw new Error(`Upload failed: ${response.status} ${errorText}`);
+    }
+
+    var data = JSON.parse(response.getContentText());
+
+    return { objectPath, success: true, md5Hash: data.md5Hash };
   }
 
   /**
@@ -77,11 +92,35 @@ class StorageService {
    * @returns {Blob} The file content.
    */
   static downloadFile(objectPath) {
+    console.log(`[StorageService.gs][downloadFile] path: ${objectPath}`);
+
+    // create HTTP request url 
     const url = `https://storage.googleapis.com/storage/v1/b/${CONFIG.BUCKET_NAME}/o/${encodeURIComponent(objectPath)}?alt=media`;
-    console.log(`[StorageService.gs] DOWNLOAD FILE`);
-    console.log(`[StorageService.gs] API CALL (stubbed): GET ${url}`);
-    console.log(`[StorageService.gs]   → Would return Blob for gs://${CONFIG.BUCKET_NAME}/${objectPath}`);
-    return null;
+
+    const service = AuthService._getCloudService();
+
+    if (!service.hasAccess()) {
+      console.log('[StorageService.gs][downloadFile] No valid OAuth session');
+    }
+
+    const token = service.getAccessToken();
+
+    // use UrlFetchApp.fetch to send GET to GCS 
+    console.log(`[StorageService.gs][downloadFile] GET ${url}`);
+
+    var response = UrlFetchApp.fetch(url, {
+      headers: {
+        Authorization: 'Bearer ' + token
+      },
+      'muteHttpExceptions': true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      const errorText = response.getContentText();
+      throw new Error(`list failed: ${response.status} ${errorText}`);
+    }
+    
+    return response.getBlob();
   }
 
   /**

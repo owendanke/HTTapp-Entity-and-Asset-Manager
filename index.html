@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HTTapp Asset Manager</title>
+<title>HTTapp Entity and Asset Manager</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
@@ -560,6 +560,10 @@ td.col-actions { text-align: right; }
 /* Hidden on sign type */
 .gallery-section.hidden { display: none; }
 
+/* Geometry entries */
+.coordinates-section.hidden { display: none; }
+.geojson-section.hidden { display: none; }
+
 /* Asset props section */
 .props-section {
   background: var(--surface2);
@@ -739,8 +743,8 @@ td.col-actions { text-align: right; }
     <div class="login-logo">
       <div class="login-logo-mark">HTT</div>
       <div>
-        <div class="login-title">HTTapp Asset Manager</div>
-        <div class="login-subtitle">Secure asset management portal</div>
+        <div class="login-title">HTTapp Entity and Asset Manager</div>
+        <div class="login-subtitle">Data Management portal</div>
       </div>
     </div>
 
@@ -789,32 +793,32 @@ td.col-actions { text-align: right; }
     <div class="toolbar">
       <div class="toolbar-left">
         <span class="section-title">Entites</span>
-        <input type="text" class="search-input" id="search-input" placeholder="Search by name or ID…" oninput="App.Table.filter()">
+        <input type="text" class="search-input" id="search-input" placeholder="Search by name or ID..." oninput="App.Table.filter()">
         <select class="filter-select" id="type-filter" onchange="App.Table.filter()">
           <option value="all">All Types</option>
           <option value="tree">tree</option>
           <option value="sign">sign</option>
         </select>
       </div>
-      <span id="asset-count" class="mono muted" style="font-size:11px;"></span>
+      <span id="entity-count" class="mono muted" style="font-size:11px;"></span>
     </div>
 
     <div class="table-container">
-      <table id="asset-table">
+      <table id="entity-table">
         <thead>
           <tr>
             <th>ID</th>
             <th>Type</th>
             <th>Name</th>
-            <th>Date Uploaded</th>
+            <th>Date Modified</th>
             <th class="col-actions"></th>
           </tr>
         </thead>
-        <tbody id="asset-tbody">
+        <tbody id="entity-tbody">
           <tr>
             <td colspan="5" class="table-empty">
               <div class="empty-icon">◫</div>
-              <div>Loading assets…</div>
+              <div>Loading entities ...</div>
             </td>
           </tr>
         </tbody>
@@ -824,12 +828,12 @@ td.col-actions { text-align: right; }
 </div>
 
 <!-- ╔══════════════════════════════════════════════════════════════════╗
-     ║  UPLOAD MODAL                                                  ║
+     ║  UPLOAD MODAL                                                    ║
      ╚══════════════════════════════════════════════════════════════════╝ -->
 <div id="upload-overlay" class="overlay hidden">
   <div class="modal">
     <div class="modal-header">
-      <span class="modal-title" id="upload-modal-title">Upload New Asset</span>
+      <span class="modal-title" id="upload-modal-title">Upload New Entity</span>
       <button class="btn-icon" onclick="App.Upload.close()">✕</button>
     </div>
 
@@ -854,32 +858,44 @@ td.col-actions { text-align: right; }
             </div>
           </div>
 
-          <!-- Asset properties -->
+          <!-- Entity properties -->
           <div class="props-section">
-            <div class="props-title">Asset Properties</div>
+            <div class="props-title">Entity Properties</div>
             <div class="props-inner">
               <div>
-                <label>Asset Type</label>
+                <label>Entity Type</label>
                 <select class="select" id="upload-type" onchange="App.Upload.onTypeChange()">
                   <option value="tree">tree</option>
                   <option value="sign">sign</option>
                 </select>
               </div>
               <div>
-                <label>Asset ID <span style="color:var(--text-muted);text-transform:none;font-weight:400">(unique slug)</span></label>
-                <input type="text" class="input" id="upload-id" placeholder="e.g. tree-oak-001">
+                <label>Entity ID <span style="color:var(--text-muted);text-transform:none;font-weight:400">(unique slug)</span></label>
+                <input type="text" class="input" id="upload-id" placeholder="e.g. 1-18">
               </div>
               <div>
-                <label>Asset Name</label>
-                <input type="text" class="input" id="upload-name" placeholder="e.g. Heritage Oak — Riverside">
+                <label>Entity Name</label>
+                <input type="text" class="input" id="upload-name" placeholder="e.g. shingle oak">
               </div>
-              <div>
+
+              <!-- GeoJSON upload section (hidden for tree and sign) -->
+              <div class="geojson-section" id="geojson-section">
                 <label>GeoJSON Geometry</label>
                 <div class="drop-zone" id="geojson-dropzone">
-                  <span class="dz-icon">⌖</span>
                   <span id="geojson-filename">Drop geometry.geojson or click to browse</span>
-                  <input type="file" accept=".geojson,application/json"
-                    onchange="App.Upload.onFileSelect('geometry', this)">
+                  <input type="file" accept=".geojson,application/json" onchange="App.Upload.onFileSelect('geometry', this)">
+                </div>
+              </div>
+
+              <!-- Coordinate entry fields (shown for tree and sign) -->
+              <div class="coordinates-section" id="coordinates-section">
+                <div>
+                  <label>Latitude</label>
+                  <input type="text" class="input" id="upload-latitude" placeholder="e.g. -0.076658">
+                </div>
+                <div>
+                  <label>Longitude</label>
+                  <input type="text" class="input" id="upload-longitude" placeholder="e.g. 51.507433">
                 </div>
               </div>
             </div>
@@ -926,7 +942,7 @@ td.col-actions { text-align: right; }
           </div>
         </div>
         <div class="markdown-content">
-          <textarea id="md-editor" placeholder="# Asset Description&#10;&#10;Write your description in Markdown…"
+          <textarea id="md-editor" placeholder="# Asset Description&#10;&#10;Write your description in Markdown..."
             oninput="App.Upload.onMdEdit()" rows="6"></textarea>
           <div id="md-preview"></div>
         </div>
@@ -950,15 +966,15 @@ td.col-actions { text-align: right; }
 <div id="delete-overlay" class="overlay hidden">
   <div class="modal">
     <div class="delete-icon">🗑</div>
-    <div class="delete-title">Delete Asset</div>
+    <div class="delete-title">Delete Entity</div>
     <div class="delete-desc" id="delete-desc">
-      Are you sure you want to delete this asset? All associated files will be permanently removed from Google Cloud Storage. This action cannot be undone.
+      Are you sure you want to delete this entity? All associated files will be permanently removed from Google Cloud Storage. This action cannot be undone.
     </div>
     <div class="delete-actions">
       <button class="btn btn-ghost" onclick="App.Delete.close()">Cancel</button>
       <button class="btn btn-danger" id="delete-confirm-btn" onclick="App.Delete.confirm()">
         <div class="spinner" id="delete-spinner"></div>
-        <span id="delete-confirm-label">Delete Asset</span>
+        <span id="delete-confirm-label">Delete Entity</span>
       </button>
     </div>
   </div>
@@ -1004,6 +1020,7 @@ const ServerBridge = (() => {
   }
 
   // ── Stub response definitions ──────────────────────────────────
+  /*
   const _stubs = {
 
     serverGetAuthUrl() {
@@ -1067,12 +1084,14 @@ const ServerBridge = (() => {
       return { success: true };
     },
   };
+  */
 
   return {
     getAuthUrl:  ()                    => _run('serverGetAuthUrl'),
     checkSession:()                    => _run('serverCheckSession'),
     signOut:     ()                    => _run('serverSignOut'),
-    listAssets:  ()                    => _run('serverListAssets'),
+    getCatalog:  ()                    => _run('serverGetCatalog'),
+    listAllEntities:  ()               => _run('serverListAllEntities'),
     uploadAsset: (data)                => _run('serverUploadAsset', data),
     deleteAsset: (id, type, name)      => _run('serverDeleteAsset', id, type, name),
     editAsset:   (id, type, updates)   => _run('serverEditAsset', id, type, updates),
@@ -1150,7 +1169,7 @@ App.Auth = (() => {
     const btn   = document.getElementById('google-login-btn');
     const label = document.getElementById('google-btn-label');
     btn.disabled      = true;
-    label.textContent = 'Opening sign-in…';
+    label.textContent = 'Opening sign-in...';
     document.getElementById('login-error').classList.remove('visible');
 
     console.log('[Auth] loginWithGoogle() - requesting auth URL from server');
@@ -1165,12 +1184,13 @@ App.Auth = (() => {
       return;
     }
 
-    console.log(`[Auth] Auth URL received: ${authUrl}`);
+    console.log(`[Auth] Auth URL received`);
 
     // ── Stub path: __STUB_AUTH__ means APIs aren't wired yet ──────────────
+    /*
     if (authUrl === '__STUB_AUTH__') {
       console.log('[Auth] STUB: skipping real popup, calling serverCheckSession() directly');
-      label.textContent = 'Verifying…';
+      label.textContent = 'Verifying...';
       const session = await ServerBridge.checkSession();
       if (session.authenticated) {
         _showApp(session.user);
@@ -1181,6 +1201,7 @@ App.Auth = (() => {
       }
       return;
     }
+    */
 
     // ── Production path: open the real Google OAuth URL in a popup ─────────
     const popupWidth  = 520;
@@ -1198,7 +1219,7 @@ App.Auth = (() => {
       return;
     }
 
-    label.textContent = 'Waiting for Google…';
+    label.textContent = 'Waiting for Google...';
     console.log('[Auth] Popup opened, waiting for AUTH_SUCCESS postMessage');
 
     // Listen for the postMessage sent by authCallback()'s success page (Auth.gs)
@@ -1225,7 +1246,7 @@ App.Auth = (() => {
   /** Called when the popup signals success (or closes). Verifies the session. */
   async function _handleAuthSuccess() {
     const label = document.getElementById('google-btn-label');
-    label.textContent = 'Verifying…';
+    label.textContent = 'Verifying...';
 
     try {
       const session = await ServerBridge.checkSession();
@@ -1259,10 +1280,10 @@ App.Auth = (() => {
 })();
 
 /* ────────────────────────────────────────────────────────────────────
-   App.Table — asset list rendering, filtering, options menu
+   App.Table — entity list rendering, filtering, options menu
 ──────────────────────────────────────────────────────────────────── */
 App.Table = (() => {
-  let _assets    = [];
+  let _entities    = [];
   let _activeMenu = null;
 
   function _typebadge(type) {
@@ -1275,22 +1296,22 @@ App.Table = (() => {
     return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
   }
 
-  function _renderRows(assets) {
-    const tbody = document.getElementById('asset-tbody');
-    if (assets.length === 0) {
+  function _renderRows(entities) {
+    const tbody = document.getElementById('entity-tbody');
+    if (entities.length === 0) {
       tbody.innerHTML = `
       <tr><td colspan="5" class="table-empty">
         <div class="empty-icon">◫</div>
-        <div>No assets found</div>
+        <div>No entities found</div>
       </td></tr>`;
       return;
     }
-    tbody.innerHTML = assets.map((a) => `
+    tbody.innerHTML = entities.map((a) => `
       <tr data-id="${a.id}" data-type="${a.type}" data-name="${a.name}">
         <td class="col-id">${a.id}</td>
         <td>${_typebadge(a.type)}</td>
         <td>${a.name}</td>
-        <td class="mono muted" style="font-size:12px">${_formatDate(a.dateUploaded)}</td>
+        <td class="mono muted" style="font-size:12px">${_formatDate(a.dateModified)}</td>
         <td class="col-actions">
           <div class="options-menu-wrapper">
             <button class="btn-icon" title="Options"
@@ -1299,7 +1320,7 @@ App.Table = (() => {
         </td>
       </tr>
     `).join('');
-    document.getElementById('asset-count').textContent = `${assets.length} asset${assets.length !== 1 ? 's' : ''}`;
+    document.getElementById('entity-count').textContent = `${entities.length} entit${entities.length !== 1 ? 'ies' : 'y'}`;
   }
 
   function closeAllMenus() {
@@ -1327,17 +1348,24 @@ App.Table = (() => {
     setTimeout(() => document.addEventListener('click', closeAllMenus, { once: true }), 10);
   }
 
+  /*
+    Load Entities from server using script
+  */
   async function load() {
-    const tbody = document.getElementById('asset-tbody');
-    tbody.innerHTML = `<tr><td colspan="5" class="table-empty"><div>Loading assets…</div></td></tr>`;
-    _assets = await ServerBridge.listAssets();
+    const tbody = document.getElementById('entity-tbody');
+    tbody.innerHTML = `<tr><td colspan="5" class="table-empty"><div>Loading entities ...</div></td></tr>`;
+
+    // ask script to read the catalog file to find definitions
+    await ServerBridge.getCatalog();
+    // retrieve and build entities
+    _entities = await ServerBridge.listAllEntities();
     filter();
   }
 
   function filter() {
     const q    = document.getElementById('search-input').value.toLowerCase();
     const type = document.getElementById('type-filter').value;
-    const filtered = _assets.filter((a) => {
+    const filtered = _entities.filter((a) => {
       const matchType = type === 'all' || a.type === type;
       const matchQ    = !q || a.id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q);
       return matchType && matchQ;
@@ -1345,23 +1373,23 @@ App.Table = (() => {
     _renderRows(filtered);
   }
 
-  function addAsset(asset) {
-    _assets.unshift(asset);
+  function addEntity(entity) {
+    _entities.unshift(entity);
     filter();
   }
 
-  function removeAsset(id) {
-    _assets = _assets.filter((a) => a.id !== id);
+  function removeEntity(id) {
+    _entities = _entities.filter((a) => a.id !== id);
     filter();
   }
 
-  function updateAsset(updated) {
-    const idx = _assets.findIndex((a) => a.id === updated.id);
-    if (idx >= 0) _assets[idx] = { ..._assets[idx], ...updated };
+  function updateEntity(updated) {
+    const idx = _entities.findIndex((a) => a.id === updated.id);
+    if (idx >= 0) _entities[idx] = { ..._entities[idx], ...updated };
     filter();
   }
 
-  return { load, filter, addAsset, removeAsset, updateAsset, toggleMenu, closeAllMenus };
+  return { load, filter, addEntity, removeEntity, updateEntity, toggleMenu, closeAllMenus };
 })();
 
 /* ────────────────────────────────────────────────────────────────────
@@ -1393,6 +1421,8 @@ App.Upload = (() => {
     _galleryImages = [];
     document.getElementById('upload-id').value    = '';
     document.getElementById('upload-name').value  = '';
+    document.getElementById('upload-latitude').value  = '';
+    document.getElementById('upload-longitude').value  = '';
     document.getElementById('upload-type').value  = 'tree';
     document.getElementById('md-editor').value    = '';
     document.getElementById('md-preview').innerHTML = '';
@@ -1404,24 +1434,91 @@ App.Upload = (() => {
     onTypeChange();
   }
 
+  function compressImage(dataUrl, maxPx, quality) {
+    return new Promise(function(resolve) {
+      const img = new Image();
+      img.onload = function() {
+        // Scale down proportionally to fit within maxPx
+        const scale  = Math.min(maxPx / img.width, maxPx / img.height, 1);
+        const width  = Math.round(img.width  * scale);
+        const height = Math.round(img.height * scale);
+
+        const canvas    = document.createElement('canvas');
+        canvas.width    = width;
+        canvas.height   = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+        resolve(canvas.toDataURL('image/jpeg', quality)); // 0.0–1.0
+      };
+      img.src = dataUrl;
+    });
+  }
+
+  /* 
+    Calls server side code to get the thumbnail data from storage
+  */
+  function loadThumbnail(entityId, type) {
+    const img         = document.getElementById('thumb-preview-img');
+    const placeholder = document.getElementById('thumb-placeholder');
+    const previewArea = document.getElementById('thumb-preview-area');
+    const cacheKey = 'thumbnail::' + entityId;
+    const cached = sessionStorage.getItem(cacheKey);
+
+    // Show a loading state
+    placeholder.querySelector('span').textContent = 'Loading…';
+    img.style.display = 'none';
+
+    // Check cache first
+    if (cached) {
+      // skip the server call entirely and return cached item
+      img.src = cached;
+      img.style.display = 'block';
+      placeholder.style.display = 'none';
+      return; 
+    }
+
+    // otherwise make server call and get from storage
+    google.script.run
+      .withSuccessHandler(async function(dataUrl) {
+        const compressed = await compressImage(dataUrl, 200, 0.75);
+        sessionStorage.setItem(cacheKey, compressed);  // store compressed image in cache
+        img.src = compressed;
+        img.style.display = 'block';
+        placeholder.style.display = 'none';
+      })
+      .withFailureHandler(function(err) {
+        console.error('Thumbnail load failed:', err);
+        placeholder.querySelector('span').textContent = 'Failed to load';
+      })
+      .serverGetThumbnail(entityId, type);
+  }
+
   function open() {
     _mode = 'upload'; _editId = null; _editType = null;
     _reset();
-    document.getElementById('upload-modal-title').textContent = 'Upload New Asset';
-    document.getElementById('upload-submit-label').textContent = '⬆ Verify + Upload';
+    document.getElementById('upload-modal-title').textContent = 'Upload New Entity';
+    document.getElementById('upload-submit-label').textContent = 'Upload';
     document.getElementById('upload-overlay').classList.remove('hidden');
   }
 
   function openEdit(id, type, name) {
+    // Upload modal modified for editing entities
     App.Table.closeAllMenus();
     _mode = 'edit'; _editId = id; _editType = type;
     _reset();
-    document.getElementById('upload-modal-title').textContent = `Edit Asset — ${id}`;
-    document.getElementById('upload-submit-label').textContent = '✓ Save Changes';
+    // load and display existing data
+    document.getElementById('upload-modal-title').textContent = `Edit Entity — ${id}`;
+    document.getElementById('upload-submit-label').textContent = 'Save Changes';
     document.getElementById('upload-id').value   = id;
     document.getElementById('upload-name').value = name;
     document.getElementById('upload-type').value = type;
     document.getElementById('upload-type').disabled = true;
+
+    // set thumbnail image
+    App.Upload.loadThumbnail(id, type);
+
+    // set gallery images
+    
     onTypeChange();
     document.getElementById('upload-overlay').classList.remove('hidden');
   }
@@ -1435,13 +1532,29 @@ App.Upload = (() => {
   function onTypeChange() {
     const type = document.getElementById('upload-type').value;
     const gallerySection = document.getElementById('gallery-section');
+    const geojsonSection = document.getElementById('geojson-section');
+    const coordinateSection = document.getElementById('coordinates-section')
+
+    // hide/show the gallery section
     if (type === 'tree') {
       gallerySection.classList.remove('hidden');
-    } else {
+    } 
+    else {
       gallerySection.classList.add('hidden');
       _galleryImages = []; _files.gallery = [];
       _renderGallery();
     }
+
+    // hide/show the GeoJSON or coordinate section
+    if (type === 'tree' || type === 'sign') {
+      geojsonSection.classList.add('hidden');
+      coordinateSection.classList.remove('hidden');
+    }
+    else {
+      geojsonSection.classList.remove('hidden');
+      coordinateSection.classList.add('hidden');
+    }
+
     _renderChecklist();
   }
 
@@ -1540,7 +1653,10 @@ App.Upload = (() => {
 
   function onMdEdit() {
     // Live sync to description file stub
-    _files.description = new Blob([document.getElementById('md-editor').value], { type: 'text/markdown' });
+    var mdValue = document.getElementById('md-editor').value
+    if (mdValue) {
+      _files.description = new Blob([mdValue], { type: 'text/markdown' });
+    }
     _renderChecklist();
   }
 
@@ -1582,35 +1698,54 @@ App.Upload = (() => {
     const id   = document.getElementById('upload-id').value.trim();
     const name = document.getElementById('upload-name').value.trim();
     const type = document.getElementById('upload-type').value;
+    const latitude = document.getElementById('upload-latitude').value.trim();
+    const longitude = document.getElementById('upload-longitude').value.trim();
 
-    if (!id)   { Toast.error('Asset ID is required.');   return; }
-    if (!name) { Toast.error('Asset Name is required.'); return; }
+    if (!id)   { Toast.error('Entity ID is required.');   return; }
+    if (!name) { Toast.error('Entity Name is required.'); return; }
 
     // Show loading
     document.getElementById('upload-spinner').classList.add('visible');
     document.getElementById('upload-submit-btn').disabled = true;
-    document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? 'Saving…' : 'Uploading…';
+    document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? 'Saving...' : 'Uploading...';
 
     if (_mode === 'upload') {
-      const result = await ServerBridge.uploadAsset({
-        id, type, name,
-        files: {
-          thumbnail:   _files.thumbnail || null,
-          description: _files.description || null,
-          geometry:    _files.geometry || null,
-          gallery:     _galleryImages,
-        },
-      });
+
+
+      if (type === 'tree' || tree === 'sign') {
+        // do not need to send geometry, but do need lat long
+        const result = await ServerBridge.uploadAsset({
+          id, type, name, latitude, longitude,
+          files: {
+            thumbnail:   _files.thumbnail || null,
+            description: _files.description || null,
+            gallery:     _galleryImages,
+          },
+        });
+      }
+      else {
+        // do not have lat long, but do need to send geometry
+        const result = await ServerBridge.uploadAssetGeometry({
+          id, type, name,
+          files: {
+            thumbnail:   _files.thumbnail || null,
+            description: _files.description || null,
+            geometry:    _files.geometry || null,
+            gallery:     _galleryImages,
+          },
+        });
+      }
 
       if (result.success) {
-        App.Table.addAsset({ id, type, name, dateUploaded: new Date().toISOString().split('T')[0] });
-        Toast.success(`Asset "${name}" uploaded successfully.`);
+        App.Table.addEntity({ id, type, name, dateModified: new Date().toISOString().split('T')[0] });
+        Toast.success(`Entity "${name}" uploaded successfully.`);
         close();
       } else {
         Toast.error('Upload failed: ' + (result.errors?.join(', ') || 'Unknown error'));
       }
-    } else {
-      // Edit mode
+    } 
+    // Edit mode
+    else {
       const result = await ServerBridge.editAsset(_editId, _editType, {
         name,
         thumbnail:   _files.thumbnail,
@@ -1619,8 +1754,8 @@ App.Upload = (() => {
         gallery:     _galleryImages.length > 0 ? _galleryImages : undefined,
       });
       if (result.success) {
-        App.Table.updateAsset({ id: _editId, name });
-        Toast.success(`Asset "${name}" updated successfully.`);
+        App.Table.updateEntity({ id: _editId, name });
+        Toast.success(`Entity "${name}" updated successfully.`);
         close();
       } else {
         Toast.error('Save failed.');
@@ -1633,7 +1768,7 @@ App.Upload = (() => {
     document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
   }
 
-  return { open, openEdit, close, onTypeChange, onFileSelect, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit };
+  return { open, openEdit, close, onTypeChange, onFileSelect, compressImage, loadThumbnail, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit };
 })();
 
 /* ────────────────────────────────────────────────────────────────────
@@ -1660,17 +1795,17 @@ App.Delete = (() => {
   async function confirm() {
     document.getElementById('delete-spinner').classList.add('visible');
     document.getElementById('delete-confirm-btn').disabled = true;
-    document.getElementById('delete-confirm-label').textContent = 'Deleting…';
+    document.getElementById('delete-confirm-label').textContent = 'Deleting...';
 
     const result = await ServerBridge.deleteAsset(_id, _type, _name);
 
     document.getElementById('delete-spinner').classList.remove('visible');
     document.getElementById('delete-confirm-btn').disabled = false;
-    document.getElementById('delete-confirm-label').textContent = 'Delete Asset';
+    document.getElementById('delete-confirm-label').textContent = 'Delete Entity';
 
     if (result.success) {
-      App.Table.removeAsset(_id);
-      Toast.success(`Asset "${_name}" deleted.`);
+      App.Table.removeEntity(_id);
+      Toast.success(`Entity "${_name}" deleted.`);
       close();
     } else {
       Toast.error('Delete failed. Please try again.');
@@ -1725,7 +1860,7 @@ document.getElementById('google-login-btn').addEventListener('click', (event) =>
    Boot
 ══════════════════════════════════════════════════════════════════════ */
 (function init() {
-  console.log('[App] HTTapp Asset Manager initialising…');
+  console.log('[App] HTTapp Entity and Asset Manager initialising...');
   // The app starts on the login overlay (shown by default).
   // App.Auth.loginWithGoogle() or App.Auth.login() will transition to the home page.
 })();

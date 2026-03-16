@@ -10,6 +10,9 @@ const CONFIG = {
   // google (firebase) storage bucket URI
   BUCKET_NAME: scriptProperties.getProperty('bucket_name'),
 
+  // catalog file name
+  CATALOG_PATH: 'catalog.json',
+
   // get client ID and secret from the project settings
   CLIENT_ID: scriptProperties.getProperty('client_id'),
   CLIENT_SECRET: scriptProperties.getProperty('client_secret'),

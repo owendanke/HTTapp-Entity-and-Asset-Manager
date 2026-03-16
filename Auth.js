@@ -198,9 +198,8 @@ function _buildSuccessPopup() {
   .msg  { color: #16a34a; font-size: 15px; font-weight: 600; margin-bottom: 6px; }
   .sub  { color: #64748b; font-size: 13px; }
 </style></head><body>
-  <div class="icon">✓</div>
-  <div class="msg">Signed in successfully</div>
-  <div class="sub">Please close this popup to finish logging in to HTTapp Asset Manager</div>
+  <div class="msg">Almost done ...</div>
+  <div class="sub">Close this popup to finish logging in to HTTapp Asset Manager</div>
   <script>
     if (window.opener) { window.opener.postMessage('AUTH_SUCCESS', '*'); }
     setTimeout(function() { window.close(); }, 800);

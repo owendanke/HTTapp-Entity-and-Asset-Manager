@@ -44,16 +44,61 @@ class AssetService {
     return [...ASSET_FILE_SCHEMA.common, ...typeFiles];
   }
 
+  /**
+   * Parse the object's id field for the user assigned asset id
+   * 
+   * @param {string} objectId the `id` field returned by the storage Objects resource
+   * @param {string} type the type of asset (i.e. tree, sign)
+   */
+  static getAssetId(objectId, type) {
+    /*
+    if (!objectId.startsWith(type)) {
+      throw new Error("Invalid prefix");
+    }
+      */
+    console.log(`[AssetService][getAssetId] objectId: ${objectId}, type: ${type}`);
+    
+    // remove everything before the type
+    // remove type prefix
+    // split with the forward slash and keep the first item
+
+    return objectId.substring(objectId.indexOf(`${type}s/`))
+      .replace(`${type}s/`, '')
+      .split('/')[0];
+  }
 
   /**
-   * Returns a object Resource parsed into an 
+   * Creates a GeoJSON Blob from latitude and longitude strings
+   * @param {string} latStr - Latitude as string
+   * @param {string} lonStr - Longitude as string
+   * @returns {Blob} GeoJSON blob
    */
-  static parseObject(object) {
-    console.log(`[AssetService.gs][parseObject] id: ${object.id}`);
+  static createGeoJSONBlob(latStr, lonStr) {
+    const lat = parseFloat(latStr);
+    const lon = parseFloat(lonStr);
 
-    console.log(`[AssetService.gs][parseObject] name: ${object.name}`);
+    if (isNaN(lat) || isNaN(lon)) {
+      throw new Error("Invalid latitude or longitude");
+    }
 
-    console.log(`[AssetService.gs][parseObject] md5Hash: ${object.md5Hash}`);
+    const geojson = {
+      type: "FeatureCollection",
+      features: [
+        {
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [lon, lat] // GeoJSON uses [longitude, latitude]
+          },
+          properties: {}
+        }
+      ]
+    };
+
+    return new Blob(
+      [JSON.stringify(geojson)],
+      { type: "application/geo+json" }
+    );
   }
 
   /**
@@ -66,57 +111,96 @@ class AssetService {
 
     for (const type of CONFIG.ENTITY_TYPES) {
       console.log(`[AssetService.gs][listAllAssets] Fetching assets of type: ${type}`);
-      const items = StorageService.listObjects(`${type}s/`);
+      const prefix = `${type}s/`;
+      const items = StorageService.listObjects(prefix).items;
 
       if (items && items.length > 0) {
         console.log(`[AssetService.gs][listAllAssets] Parsing ${type} object list into asset metadata records...`);
-        items.forEach(obj => {
-          AssetService.parseObject(obj);
+        items.forEach((object) => {
+          allAssets.push(new Entity(
+            AssetService.getAssetId(object.id, type),
+            type,
+            object.name,
+            
+            base64ToHex(object.md5Hash)
+          ));
+          console.log(`[AssetService.gs][listAllAssets] added asset: ${object.id}, ${type}, ${object.name}, ${base64ToHex(object.md5Hash)}`);
         });
       }
     }
 
-    // ── Stub: return mock asset records for UI development ─────────────────
-    const mockAssets = [
-      {
-        id:           'tree-oak-001',
-        type:         'tree',
-        name:         'Heritage Oak — Riverside',
-        dateUploaded: '2025-01-14',
-        md5Hash:      'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4',
-      },
-      {
-        id:           'tree-maple-002',
-        type:         'tree',
-        name:         'Red Maple — North Trail',
-        dateUploaded: '2025-02-03',
-        md5Hash:      'b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5',
-      },
-      {
-        id:           'sign-trailhead-001',
-        type:         'sign',
-        name:         'Trailhead Marker — East Entrance',
-        dateUploaded: '2025-02-10',
-        md5Hash:      'c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6',
-      },
-      {
-        id:           'sign-info-002',
-        type:         'sign',
-        name:         'Info Kiosk — Visitor Center',
-        dateUploaded: '2025-03-01',
-        md5Hash:      'd4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1',
-      },
-      {
-        id:           'tree-pine-003',
-        type:         'tree',
-        name:         'Longleaf Pine — South Ridge',
-        dateUploaded: '2025-03-15',
-        md5Hash:      'e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2',
-      },
-    ];
+    console.log(`[AssetService.gs][listAllAssets] LIST COMPLETE — Returning ${allAssets.length} asset(s)`);
+    return allAssets;
+  }
 
-    console.log(`[AssetService.gs][listAllAssets] LIST COMPLETE — Returning ${mockAssets.length} mock asset(s)`);
-    return mockAssets;
+  /**
+   * Uploads a new entity to GCS.
+   * Steps:
+   *   1. Validate required files are present for the asset type.
+   *   2. Upload each file to the appropriate GCS path.
+   *   3. Generate and store MD5 hash.
+   *   4. Update master-hash.json and changelog.json.
+   *
+   * @param {Object} assetData - { id, type, name, latitude, longitude, files: { thumbnail, description, gallery[] } }
+   * @returns {{ success: boolean, assetId: string, errors: string[] }}
+   */
+  static uploadAsset(assetData) {
+    const { id, type, name, latitude, longitude, files } = assetData;
+    const errors = [];
+
+    console.log(`[AssetService.gs][uploadAsset]`);
+    console.log(`[AssetService.gs][uploadAsset] ID: ${id}`);
+    console.log(`[AssetService.gs][uploadAsset] Type: ${type}`);
+    console.log(`[AssetService.gs][uploadAsset] Name: ${name}`);
+    console.log(`[AssetService.gs][uploadAsset] Latitude: ${name}`);
+    console.log(`[AssetService.gs][uploadAsset] Longitude: ${name}`);
+
+    // Validate type
+    if (!CONFIG.ENTITY_TYPES.includes(type)) {
+      errors.push(`Unknown asset type: "${type}". Valid types: ${CONFIG.ENTITY_TYPES.join(', ')}`);
+      return { success: false, assetId: id, errors };
+    }
+
+    const basePath = `${type}s/${id}`;
+
+    // Upload common files
+    if (files.thumbnail) {
+      // upload thumbnail
+      StorageService.uploadFile(`${basePath}/thumbnail.jpg`, files.thumbnail, 'image/jpeg');
+    } else {
+      errors.push('Missing required file: thumbnail.jpg');
+    }
+
+    if (files.description) {
+      // upload description
+      StorageService.uploadFile(`${basePath}/description.md`, files.description, 'text/markdown');
+    } else {
+      errors.push('Missing required file: description.md');
+    }
+
+    // ── Upload type-specific files ─────────────────────────────────────────
+    if (type === 'tree') {
+      const galleryFiles = files.gallery || [];
+      if (galleryFiles.length === 0) {
+        console.log('[AssetService.gs]   → WARNING: Tree asset uploaded with no gallery images');
+      }
+      galleryFiles.forEach((galleryBlob, index) => {
+        const paddedIndex = String(index + 1).padStart(3, '0');
+        StorageService.uploadFile(`${basePath}/gallery-${paddedIndex}.jpg`, galleryBlob, 'image/jpeg');
+      });
+    }
+
+    if (errors.length > 0) {
+      console.log(`[AssetService.gs] UPLOAD FAILED with ${errors.length} error(s):`, errors);
+      return { success: false, assetId: id, errors };
+    }
+
+    // ── Post-upload side effects ───────────────────────────────────────────
+    HashService.updateMasterHash(id, type, 'upload');
+    HashService.appendChangelog(id, type, name, 'upload');
+
+    console.log(`[AssetService.gs] UPLOAD SUCCESS — Asset ${id} stored at gs://${CONFIG.BUCKET_NAME}/${basePath}/`);
+    return { success: true, assetId: id, errors: [] };
   }
 
   /**
@@ -130,7 +214,7 @@ class AssetService {
    * @param {Object} assetData - { id, type, name, files: { thumbnail, description, geometry, gallery[] } }
    * @returns {{ success: boolean, assetId: string, errors: string[] }}
    */
-  static uploadAsset(assetData) {
+  static uploadAssetGeometry(assetData) {
     const { id, type, name, files } = assetData;
     const errors = [];
 
@@ -139,7 +223,7 @@ class AssetService {
     console.log(`[AssetService.gs][uploadAsset] Type: ${type}`);
     console.log(`[AssetService.gs][uploadAsset] Name: ${name}`);
 
-    // ── Validate type ──────────────────────────────────────────────────────
+    // Validate type
     if (!CONFIG.ENTITY_TYPES.includes(type)) {
       errors.push(`Unknown asset type: "${type}". Valid types: ${CONFIG.ENTITY_TYPES.join(', ')}`);
       return { success: false, assetId: id, errors };
@@ -147,20 +231,23 @@ class AssetService {
 
     const basePath = `${type}s/${id}`;
 
-    // ── Upload common files ────────────────────────────────────────────────
+    // Upload common files
     if (files.thumbnail) {
+      // upload thumbnail
       StorageService.uploadFile(`${basePath}/thumbnail.jpg`, files.thumbnail, 'image/jpeg');
     } else {
       errors.push('Missing required file: thumbnail.jpg');
     }
 
     if (files.description) {
+      // upload description
       StorageService.uploadFile(`${basePath}/description.md`, files.description, 'text/markdown');
     } else {
       errors.push('Missing required file: description.md');
     }
 
     if (files.geometry) {
+      // upload geojson
       StorageService.uploadFile(`${basePath}/geometry.geojson`, files.geometry, 'application/json');
     } else {
       errors.push('Missing required file: geometry.geojson');
@@ -253,6 +340,14 @@ class AssetService {
     console.log(`[AssetService.gs] EDIT SUCCESS — Asset ${assetId} updated`);
     return { success: true };
   }
+
+
+  static getThumbnailDataUrl(entityId, type) {
+    const blob = StorageService.downloadFile(`${type}s/${entityId}/thumbnail.jpg`);
+    const base64 = Utilities.base64Encode(blob.getBytes());
+    const mimeType = blob.getContentType() || 'image/jpeg';
+    return `data:${mimeType};base64,${base64}`;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -273,4 +368,8 @@ function serverDeleteAsset(assetId, assetType, assetName) {
 
 function serverEditAsset(assetId, assetType, updates) {
   return AssetService.editAsset(assetId, assetType, updates);
+}
+
+function serverGetThumbnail(entiyId, type) {
+  return AssetService.getThumbnailDataUrl(entiyId, type);
 }

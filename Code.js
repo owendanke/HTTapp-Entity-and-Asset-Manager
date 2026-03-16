@@ -38,3 +38,24 @@ function doGet(e) {
 function include(filename) {
   return HtmlService.createHtmlOutputFromFile(filename).getContent();
 }
+
+/**
+ * Convert a base64 number to a hex number.
+ * @param {string} base64 
+ * @returns {string} hex
+ */
+function base64ToHex(base64) {
+  // 1. Decode the Base64 string into a byte array.
+  const bytes = Utilities.base64Decode(base64);
+
+  // 2. Convert each byte in the array to its two-digit hexadecimal representation.
+  const hexArray = bytes.map(function(byte) {
+    // Convert byte to hex string (0-255).
+    const hex = (byte & 0xFF).toString(16);
+    // Ensure two digits by padding with a leading zero if necessary.
+    return (hex.length === 1) ? '0' + hex : hex;
+  });
+
+  // 3. Join the array of hex strings into a single string and convert to uppercase for standard formatting.
+  return hexArray.join('').toUpperCase();
+}
