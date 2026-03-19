@@ -414,17 +414,16 @@ td.col-actions { text-align: right; }
 .table-empty .empty-icon { font-size: 32px; margin-bottom: 12px; opacity: 0.4; }
 
 /* ─── Ellipsis / Options menu ───────────────────────────────────── */
-.options-menu-wrapper { position: relative; display: inline-flex; }
+.options-menu-wrapper { display: inline-flex; }
 
 .options-dropdown {
-  position: absolute; right: 0; top: calc(100% + 4px);
+  position: fixed;
   background: var(--surface2);
   border: 1px solid var(--border-hi);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   min-width: 130px;
   z-index: 100;
-  overflow: hidden;
   animation: dropDown 0.15s ease;
 }
 @keyframes dropDown {
@@ -1332,7 +1331,7 @@ App.Table = (() => {
     if (_activeMenu) { closeAllMenus(); return; }
 
     const btn = event.currentTarget;
-    const wrapper = btn.closest('.options-menu-wrapper');
+    const rect = btn.getBoundingClientRect();
 
     const menu = document.createElement('div');
     menu.className = 'options-dropdown';
@@ -1341,10 +1340,24 @@ App.Table = (() => {
       <div class="menu-divider"></div>
       <button class="menu-item danger" onclick="App.Delete.open('${id}','${type}','${name.replace(/'/g,"\\'")}')">Delete</button>
     `;
-    wrapper.appendChild(menu);
+
+    // Append to body so it's never clipped by table overflow
+    document.body.appendChild(menu);
     _activeMenu = menu;
 
-    // Click outside closes
+    // Position below the button by default with padding
+    let top = rect.bottom + 4;
+    let left = rect.right - menu.offsetWidth - 12;
+
+    // Flip upward if the menu would go off the bottom of the viewport
+    if (rect.bottom + menu.offsetHeight > window.innerHeight) {
+      top = rect.top - menu.offsetHeight - 4;
+    }
+
+    menu.style.position = 'fixed';
+    menu.style.top = `${top}px`;
+    menu.style.left = `${left}px`;
+
     setTimeout(() => document.addEventListener('click', closeAllMenus, { once: true }), 10);
   }
 
