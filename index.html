@@ -935,7 +935,7 @@ td.col-actions { text-align: right; }
       <!-- Markdown preview -->
       <div class="markdown-section">
         <div class="markdown-header">
-          <span class="markdown-label">Markdown Preview</span>
+          <span class="markdown-label">Markdown Description</span>
           <div class="markdown-tabs">
             <button class="md-tab active" id="md-tab-edit" onclick="App.Upload.switchMdTab('edit')">Edit</button>
             <button class="md-tab" id="md-tab-preview" onclick="App.Upload.switchMdTab('preview')">Preview</button>
@@ -1461,8 +1461,8 @@ App.Upload = (() => {
     const img         = document.getElementById('thumb-preview-img');
     const placeholder = document.getElementById('thumb-placeholder');
     const previewArea = document.getElementById('thumb-preview-area');
-    const cacheKey = 'thumbnail::' + entityId;
-    const cached = sessionStorage.getItem(cacheKey);
+    const cacheKey    = 'thumbnail::' + entityId;
+    const cached      = sessionStorage.getItem(cacheKey);
 
     // Show a loading state
     placeholder.querySelector('span').textContent = 'Loading…';
@@ -1493,6 +1493,34 @@ App.Upload = (() => {
       .serverGetThumbnail(entityId, type);
   }
 
+  function loadMarkdown(entityId, type) {
+    const editor   = document.getElementById('md-editor');
+    const preview  = document.getElementById('md-preview');
+    const cacheKey = 'markdown::' + entityId;
+    const cached   = sessionStorage.getItem(cacheKey);
+
+    // Show a loading state
+    editor.value = 'Loading ...';
+
+    // Check cache first
+    if (cached) {
+      editor.value = cached;
+      return;
+    }
+
+    // otherwise make server call and get from storage
+    google.script.run
+      .withSuccessHandler(function(mdText) {
+        sessionStorage.setItem(cacheKey, mdText);
+        editor.value = mdText;
+      })
+      .withFailureHandler(function(err) {
+        console.error('Markdown load failed:', err);
+        editor.value = 'Failed to load description';
+      })
+      .serverGetDescription(entityId, type);
+  }
+
   function open() {
     _mode = 'upload'; _editId = null; _editType = null;
     _reset();
@@ -1514,10 +1542,9 @@ App.Upload = (() => {
     document.getElementById('upload-type').value = type;
     document.getElementById('upload-type').disabled = true;
 
-    // set thumbnail image
-    App.Upload.loadThumbnail(id, type);
-
-    // set gallery images
+    // load server content
+    loadThumbnail(id, type);
+    loadMarkdown(id, type);
     
     onTypeChange();
     document.getElementById('upload-overlay').classList.remove('hidden');
@@ -1599,6 +1626,7 @@ App.Upload = (() => {
     _renderChecklist();
   }
 
+
   function _renderGallery() {
     const carousel = document.getElementById('gallery-carousel');
     const count    = document.getElementById('gallery-count');
@@ -1652,11 +1680,18 @@ App.Upload = (() => {
   }
 
   function onMdEdit() {
-    // Live sync to description file stub
+    
     var mdValue = document.getElementById('md-editor').value
+    
+    // Sync to description to blob for later upload
     if (mdValue) {
       _files.description = new Blob([mdValue], { type: 'text/markdown' });
     }
+    // delete blob when description is empty
+    else {
+      delete _files.description;
+    }
+
     _renderChecklist();
   }
 
@@ -1768,7 +1803,7 @@ App.Upload = (() => {
     document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
   }
 
-  return { open, openEdit, close, onTypeChange, onFileSelect, compressImage, loadThumbnail, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit };
+  return { open, openEdit, close, onTypeChange, onFileSelect, compressImage, loadThumbnail, loadMarkdown, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit };
 })();
 
 /* ────────────────────────────────────────────────────────────────────

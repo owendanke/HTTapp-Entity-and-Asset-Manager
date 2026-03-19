@@ -341,12 +341,33 @@ class AssetService {
     return { success: true };
   }
 
-
-  static getThumbnailDataUrl(entityId, type) {
+  /**
+   * Makes a GCS JSON get request to the server and returns the entity's thumbnail
+   * 
+   * @param {string} entityId - Unique ID for the entity
+   * @param {string} type     - A valid entity type ('tree' | 'sign')
+   * @returns                 - GCS Object data
+   */
+  static getThumbnailData(entityId, type) {
     const blob = StorageService.downloadFile(`${type}s/${entityId}/thumbnail.jpg`);
     const base64 = Utilities.base64Encode(blob.getBytes());
     const mimeType = blob.getContentType() || 'image/jpeg';
+
     return `data:${mimeType};base64,${base64}`;
+  }
+
+  /**
+   * Makes a GCS JSON get request to the server and returns the entity's markdown description
+   * 
+   * @param {string} entityId - Unique ID for the entity
+   * @param {string} type     - A valid entity type ('tree' | 'sign')
+   * @returns                 - GCS Object data
+   */
+  static getDescriptionData(entityId, type) {
+    const blob = StorageService.downloadFile(`${type}s/${entityId}/description.md`);
+    const mimeType = blob.getContentType() || 'text/markdown';
+
+    return blob.getDataAsString('UTF-8');
   }
 }
 
@@ -371,5 +392,9 @@ function serverEditAsset(assetId, assetType, updates) {
 }
 
 function serverGetThumbnail(entiyId, type) {
-  return AssetService.getThumbnailDataUrl(entiyId, type);
+  return AssetService.getThumbnailData(entiyId, type);
+}
+
+function serverGetDescription(entiyId, type) {
+  return AssetService.getDescriptionData(entiyId, type);
 }
