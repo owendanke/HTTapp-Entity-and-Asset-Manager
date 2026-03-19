@@ -56,6 +56,27 @@ html, body {
 ::-webkit-scrollbar-track { background: var(--surface); }
 ::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
 
+/* ─── Loader ────────────────────────────────────────────────────── */
+.loader {
+    width: 48px;
+    height: 48px;
+    border: 5px solid var(--accent-dim);
+    border-bottom-color: var(--accent-hi);
+    border-radius: 50%;
+    display: inline-block;
+    box-sizing: border-box;
+    animation: rotation 1s linear infinite;
+    }
+
+    @keyframes rotation {
+    0% {
+        transform: rotate(0deg);
+    }
+    100% {
+        transform: rotate(360deg);
+    }
+} 
+
 /* ─── Typography helpers ────────────────────────────────────────── */
 .mono { font-family: var(--mono); }
 .muted { color: var(--text-muted); }
@@ -837,116 +858,120 @@ td.col-actions { text-align: right; }
     </div>
 
     <div class="modal-body">
-      <div class="modal-columns">
-        <!-- ─── LEFT COLUMN ──────────────────────────────────────── -->
-        <div class="upload-left">
-
-          <!-- Gallery carousel (hidden for sign) -->
-          <div class="gallery-section" id="gallery-section">
-            <div class="gallery-header">
-              <span class="gallery-label">Image Gallery Carousel</span>
-              <span class="gallery-count" id="gallery-count">0 images</span>
-            </div>
-            <div class="gallery-carousel" id="gallery-carousel">
-              <button class="gallery-add-btn" onclick="document.getElementById('gallery-file-input').click()">
-                <span class="plus">+</span>
-                <span>Add</span>
-              </button>
-              <input type="file" id="gallery-file-input" accept="image/*" multiple style="display:none"
-                onchange="App.Upload.addGalleryImages(this.files)">
-            </div>
-          </div>
-
-          <!-- Entity properties -->
-          <div class="props-section">
-            <div class="props-title">Entity Properties</div>
-            <div class="props-inner">
-              <div>
-                <label>Entity Type</label>
-                <select class="select" id="upload-type" onchange="App.Upload.onTypeChange()">
-                  <option value="tree">tree</option>
-                  <option value="sign">sign</option>
-                </select>
-              </div>
-              <div>
-                <label>Entity ID <span style="color:var(--text-muted);text-transform:none;font-weight:400">(unique slug)</span></label>
-                <input type="text" class="input" id="upload-id" placeholder="e.g. 1-18">
-              </div>
-              <div>
-                <label>Entity Name</label>
-                <input type="text" class="input" id="upload-name" placeholder="e.g. shingle oak">
-              </div>
-
-              <!-- GeoJSON upload section (hidden for tree and sign) -->
-              <div class="geojson-section" id="geojson-section">
-                <label>GeoJSON Geometry</label>
-                <div class="drop-zone" id="geojson-dropzone">
-                  <span id="geojson-filename">Drop geometry.geojson or click to browse</span>
-                  <input type="file" accept=".geojson,application/json" onchange="App.Upload.onFileSelect('geometry', this)">
-                </div>
-              </div>
-
-              <!-- Coordinate entry fields (shown for tree and sign) -->
-              <div class="coordinates-section" id="coordinates-section">
-                <div>
-                  <label>Latitude</label>
-                  <input type="text" class="input" id="upload-latitude" placeholder="e.g. -0.076658">
-                </div>
-                <div>
-                  <label>Longitude</label>
-                  <input type="text" class="input" id="upload-longitude" placeholder="e.g. 51.507433">
-                </div>
-              </div>
-            </div>
-          </div>
-
-        </div><!-- /upload-left -->
-
-        <!-- ─── RIGHT COLUMN ─────────────────────────────────────── -->
-        <div class="upload-right">
-
-          <!-- Thumbnail -->
-          <div class="thumb-section">
-            <div class="thumb-preview-area" id="thumb-preview-area">
-              <div class="thumb-placeholder" id="thumb-placeholder">
-                <span>Click to upload</span>
-              </div>
-              <img id="thumb-preview-img" style="display:none">
-              <input type="file" accept="image/*" onchange="App.Upload.onFileSelect('thumbnail', this)">
-            </div>
-            <div class="thumb-label">Thumbnail Image</div>
-          </div>
-
-          <!-- File checklist -->
-          <div class="checklist-section">
-            <div class="checklist-header">
-              <div class="checklist-title">File Checklist</div>
-              <div class="checklist-subtitle">Select an entry to upload file(s)</div>
-            </div>
-            <div class="checklist-body" id="checklist-body">
-              <!-- Populated by JS -->
-            </div>
-          </div>
-
-        </div><!-- /upload-right -->
-      </div><!-- /modal-columns -->
-
-      <!-- Markdown preview -->
-      <div class="markdown-section">
-        <div class="markdown-header">
-          <span class="markdown-label">Markdown Description</span>
-          <div class="markdown-tabs">
-            <button class="md-tab active" id="md-tab-edit" onclick="App.Upload.switchMdTab('edit')">Edit</button>
-            <button class="md-tab" id="md-tab-preview" onclick="App.Upload.switchMdTab('preview')">Preview</button>
-          </div>
-        </div>
-        <div class="markdown-content">
-          <textarea id="md-editor" placeholder="# Asset Description&#10;&#10;Write your description in Markdown..."
-            oninput="App.Upload.onMdEdit()" rows="6"></textarea>
-          <div id="md-preview"></div>
-        </div>
+      <!-- LOADER -->
+      <div id="modal-loader" style="display:none; text-align:center; padding: 1rem;">
+        <span class="loader"></span>
       </div>
+      <div id="modal-content">
+        <div class="modal-columns">
+          <!-- LEFT COLUMN -->
+          <div class="upload-left">
 
+            <!-- Gallery carousel (hidden for sign) -->
+            <div class="gallery-section" id="gallery-section">
+              <div class="gallery-header">
+                <span class="gallery-label">Image Gallery Carousel</span>
+                <span class="gallery-count" id="gallery-count">0 images</span>
+              </div>
+              <div class="gallery-carousel" id="gallery-carousel">
+                <button class="gallery-add-btn" onclick="document.getElementById('gallery-file-input').click()">
+                  <span class="plus">+</span>
+                  <span>Add</span>
+                </button>
+                <input type="file" id="gallery-file-input" accept="image/*" multiple style="display:none"
+                  onchange="App.Upload.addGalleryImages(this.files)">
+              </div>
+            </div>
+
+            <!-- Entity properties -->
+            <div class="props-section">
+              <div class="props-title">Entity Properties</div>
+              <div class="props-inner">
+                <div>
+                  <label>Entity Type</label>
+                  <select class="select" id="upload-type" onchange="App.Upload.onTypeChange()">
+                    <option value="tree">tree</option>
+                    <option value="sign">sign</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Entity ID <span style="color:var(--text-muted);text-transform:none;font-weight:400">(unique slug)</span></label>
+                  <input type="text" class="input" id="upload-id" placeholder="e.g. 1-18">
+                </div>
+                <div>
+                  <label>Entity Name</label>
+                  <input type="text" class="input" id="upload-name" placeholder="e.g. shingle oak">
+                </div>
+
+                <!-- GeoJSON upload section (hidden for tree and sign) -->
+                <div class="geojson-section" id="geojson-section">
+                  <label>GeoJSON Geometry</label>
+                  <div class="drop-zone" id="geojson-dropzone">
+                    <span id="geojson-filename">Drop geometry.geojson or click to browse</span>
+                    <input type="file" accept=".geojson,application/json" onchange="App.Upload.onFileSelect('geometry', this)">
+                  </div>
+                </div>
+
+                <!-- Coordinate entry fields (shown for tree and sign) -->
+                <div class="coordinates-section" id="coordinates-section">
+                  <div>
+                    <label>Latitude</label>
+                    <input type="text" class="input" id="upload-latitude" placeholder="e.g. -0.076658">
+                  </div>
+                  <div>
+                    <label>Longitude</label>
+                    <input type="text" class="input" id="upload-longitude" placeholder="e.g. 51.507433">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div><!-- /upload-left -->
+
+          <!-- RIGHT COLUMN -->
+          <div class="upload-right">
+
+            <!-- Thumbnail -->
+            <div class="thumb-section">
+              <div class="thumb-preview-area" id="thumb-preview-area">
+                <div class="thumb-placeholder" id="thumb-placeholder">
+                  <span>Click to upload</span>
+                </div>
+                <img id="thumb-preview-img" style="display:none">
+                <input type="file" accept="image/*" onchange="App.Upload.onFileSelect('thumbnail', this)">
+              </div>
+              <div class="thumb-label">Thumbnail Image</div>
+            </div>
+
+            <!-- File checklist -->
+            <div class="checklist-section">
+              <div class="checklist-header">
+                <div class="checklist-title">File Checklist</div>
+                <div class="checklist-subtitle">Select an entry to upload file(s)</div>
+              </div>
+              <div class="checklist-body" id="checklist-body">
+                <!-- Populated by JS -->
+              </div>
+            </div>
+
+          </div><!-- /upload-right -->
+        </div><!-- /modal-columns -->
+
+        <!-- Markdown preview -->
+        <div class="markdown-section">
+          <div class="markdown-header">
+            <span class="markdown-label">Markdown Description</span>
+            <div class="markdown-tabs">
+              <button class="md-tab active" id="md-tab-edit" onclick="App.Upload.switchMdTab('edit')">Edit</button>
+              <button class="md-tab" id="md-tab-preview" onclick="App.Upload.switchMdTab('preview')">Preview</button>
+            </div>
+          </div>
+          <div class="markdown-content">
+            <textarea id="md-editor" placeholder="# Asset Description&#10;&#10;Write your description in Markdown..."
+              oninput="App.Upload.onMdEdit()" rows="6"></textarea>
+            <div id="md-preview"></div>
+          </div>
+        </div><!-- /markdown-section -->
+      </div><!-- /modal-content -->
     </div><!-- /modal-body -->
 
     <div class="modal-footer">
@@ -1447,7 +1472,7 @@ App.Upload = (() => {
     onTypeChange();
   }
 
-  function compressImage(dataUrl, maxPx, quality) {
+  function _compressImage(dataUrl, maxPx, quality) {
     return new Promise(function(resolve) {
       const img = new Image();
       img.onload = function() {
@@ -1470,68 +1495,68 @@ App.Upload = (() => {
   /* 
     Calls server side code to get the thumbnail data from storage
   */
-  function loadThumbnail(entityId, type) {
+  function _loadThumbnail(entityId, type) {
     const img         = document.getElementById('thumb-preview-img');
     const placeholder = document.getElementById('thumb-placeholder');
     const previewArea = document.getElementById('thumb-preview-area');
     const cacheKey    = 'thumbnail::' + entityId;
     const cached      = sessionStorage.getItem(cacheKey);
 
-    // Show a loading state
-    placeholder.querySelector('span').textContent = 'Loading…';
-    img.style.display = 'none';
-
-    // Check cache first
-    if (cached) {
-      // skip the server call entirely and return cached item
-      img.src = cached;
-      img.style.display = 'block';
-      placeholder.style.display = 'none';
-      return; 
-    }
-
-    // otherwise make server call and get from storage
-    google.script.run
-      .withSuccessHandler(async function(dataUrl) {
-        const compressed = await compressImage(dataUrl, 200, 0.75);
-        sessionStorage.setItem(cacheKey, compressed);  // store compressed image in cache
-        img.src = compressed;
+    return new Promise(function(resolve, reject) {
+      // Check cache first
+      if (cached) {
+        img.src = cached;
         img.style.display = 'block';
         placeholder.style.display = 'none';
-      })
-      .withFailureHandler(function(err) {
-        console.error('Thumbnail load failed:', err);
-        placeholder.querySelector('span').textContent = 'Failed to load';
-      })
-      .serverGetThumbnail(entityId, type);
+        resolve();
+        return; 
+      }
+
+      // otherwise make server call and get from storage
+      google.script.run
+        .withSuccessHandler(async function(dataUrl) {
+          const compressed = await _compressImage(dataUrl, 200, 0.75);
+          sessionStorage.setItem(cacheKey, compressed);  // store compressed image in cache
+          img.src = compressed;
+          img.style.display = 'block';
+          placeholder.style.display = 'none';
+          resolve();
+        })
+        .withFailureHandler(function(err) {
+          placeholder.querySelector('span').textContent = 'Failed to load';
+          reject(err);
+        })
+        .serverGetThumbnail(entityId, type);
+      });
   }
 
-  function loadMarkdown(entityId, type) {
+  function _loadMarkdown(entityId, type) {
     const editor   = document.getElementById('md-editor');
     const preview  = document.getElementById('md-preview');
     const cacheKey = 'markdown::' + entityId;
     const cached   = sessionStorage.getItem(cacheKey);
 
-    // Show a loading state
-    editor.value = 'Loading ...';
+    return new Promise(function(resolve, reject) {
+      // Check cache first
+      if (cached) {
+        editor.value = cached;
+        resolve();
+        return;
+      }
 
-    // Check cache first
-    if (cached) {
-      editor.value = cached;
-      return;
-    }
-
-    // otherwise make server call and get from storage
-    google.script.run
+      // otherwise make server call and get from storage
+      google.script.run
       .withSuccessHandler(function(mdText) {
         sessionStorage.setItem(cacheKey, mdText);
         editor.value = mdText;
+        resolve();
       })
       .withFailureHandler(function(err) {
-        console.error('Markdown load failed:', err);
         editor.value = 'Failed to load description';
+        reject(err);
       })
       .serverGetDescription(entityId, type);
+    });
   }
 
   function open() {
@@ -1541,13 +1566,16 @@ App.Upload = (() => {
     document.getElementById('upload-submit-label').textContent = 'Upload';
     document.getElementById('upload-overlay').classList.remove('hidden');
   }
-
+  /**
+   * Upload modal modified for editing entities
+  */
   function openEdit(id, type, name) {
-    // Upload modal modified for editing entities
+    
     App.Table.closeAllMenus();
     _mode = 'edit'; _editId = id; _editType = type;
     _reset();
-    // load and display existing data
+    const content = document.getElementById('modal-content');
+
     document.getElementById('upload-modal-title').textContent = `Edit Entity — ${id}`;
     document.getElementById('upload-submit-label').textContent = 'Save Changes';
     document.getElementById('upload-id').value   = id;
@@ -1555,9 +1583,19 @@ App.Upload = (() => {
     document.getElementById('upload-type').value = type;
     document.getElementById('upload-type').disabled = true;
 
-    // load server content
-    loadThumbnail(id, type);
-    loadMarkdown(id, type);
+    // Show loader, hide modal content until ready
+    const loader = document.getElementById('modal-loader');
+    loader.style.display = 'block';
+    content.style.display = 'none';
+
+    Promise.all([
+      _loadThumbnail(id, type),
+      _loadMarkdown(id, type)
+    ])
+    .finally(function() {
+      loader.style.display = 'none';
+      content.style.display = 'block';
+    });
     
     onTypeChange();
     document.getElementById('upload-overlay').classList.remove('hidden');
@@ -1816,7 +1854,7 @@ App.Upload = (() => {
     document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
   }
 
-  return { open, openEdit, close, onTypeChange, onFileSelect, compressImage, loadThumbnail, loadMarkdown, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit };
+  return { open, openEdit, close, onTypeChange, onFileSelect, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit };
 })();
 
 /* ────────────────────────────────────────────────────────────────────
