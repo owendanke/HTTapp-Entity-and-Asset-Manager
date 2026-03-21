@@ -312,9 +312,9 @@ class AssetService {
    */
   static editAsset(assetId, assetType, updates) {
     console.log(`[AssetService.gs] EDIT ASSET`);
-    console.log(`[AssetService.gs]   → ID   : ${assetId}`);
-    console.log(`[AssetService.gs]   → Type : ${assetType}`);
-    console.log(`[AssetService.gs]   → Updating fields: ${Object.keys(updates).join(', ')}`);
+    console.log(`[AssetService.gs] ID : ${assetId}`);
+    console.log(`[AssetService.gs] Type : ${assetType}`);
+    console.log(`[AssetService.gs] Updating fields: ${Object.keys(updates).join(', ')}`);
 
     const basePath = `${assetType}s/${assetId}`;
 
@@ -325,7 +325,7 @@ class AssetService {
       StorageService.uploadFile(`${basePath}/description.md`, updates.description, 'text/markdown');
     }
     if (updates.geometry) {
-      StorageService.uploadFile(`${basePath}/geometry.geojson`, updates.geometry, 'application/json');
+      StorageService.uploadFile(`${basePath}/geography.geojson`, updates.geometry, 'application/geo+json');
     }
     if (updates.gallery && assetType === 'tree') {
       updates.gallery.forEach((galleryBlob, index) => {
@@ -349,6 +349,7 @@ class AssetService {
    * @returns                 - GCS Object data
    */
   static getThumbnailData(entityId, type) {
+    console.log(`[AssetService.gs][getThumbnailData] ${entityId}, ${type}`);
     const blob = StorageService.downloadFile(`${type}s/${entityId}/thumbnail.jpg`);
     const base64 = Utilities.base64Encode(blob.getBytes());
     const mimeType = blob.getContentType() || 'image/jpeg';
@@ -364,10 +365,31 @@ class AssetService {
    * @returns                 - GCS Object data
    */
   static getDescriptionData(entityId, type) {
+    console.log(`[AssetService.gs][getDescriptionData] ${entityId}, ${type}`);
     const blob = StorageService.downloadFile(`${type}s/${entityId}/description.md`);
     const mimeType = blob.getContentType() || 'text/markdown';
 
     return blob.getDataAsString('UTF-8');
+  }
+
+  /**
+   * Makes a GCS JSON get request to the server and returns the entity's GeoJSON geography
+   * 
+   * @param {string} entityId - Unique ID for the entity
+   * @param {string} type     - A valid entity type ('tree' | 'sign')
+   * @returns                 - GCS Object data
+   */
+  static getGeographyData(entityId, type) {
+    console.log(`[AssetService.gs][getGeographyData] ${entityId}, ${type}`);
+    const blob = StorageService.downloadFile(`${type}s/${entityId}/geography.geojson`);
+    const mimeType = blob.getContentType() || 'application/geo+json';
+
+    const geography = JSON.parse(blob.getDataAsString());
+
+    if (geography.features[0].geometry.type === "Point") {
+      return geography.features[0].geometry.coordinates;
+    }
+    return '';
   }
 }
 
@@ -387,8 +409,8 @@ function serverDeleteAsset(assetId, assetType, assetName) {
   return AssetService.deleteAsset(assetId, assetType, assetName);
 }
 
-function serverEditAsset(assetId, assetType, updates) {
-  return AssetService.editAsset(assetId, assetType, updates);
+function serverEditAsset(entiyId, type, updates) {
+  return AssetService.editAsset(entiyId, type, updates);
 }
 
 function serverGetThumbnail(entiyId, type) {
@@ -397,4 +419,8 @@ function serverGetThumbnail(entiyId, type) {
 
 function serverGetDescription(entiyId, type) {
   return AssetService.getDescriptionData(entiyId, type);
+}
+
+function serverGetGeography(entiyId, type) {
+  return AssetService.getGeographyData(entiyId, type);
 }

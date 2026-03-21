@@ -985,7 +985,7 @@ td.col-actions { text-align: right; }
 </div>
 
 <!-- ╔══════════════════════════════════════════════════════════════════╗
-     ║  DELETE CONFIRM MODAL                                          ║
+     ║  DELETE CONFIRM MODAL                                            ║
      ╚══════════════════════════════════════════════════════════════════╝ -->
 <div id="delete-overlay" class="overlay hidden">
   <div class="modal">
@@ -1005,7 +1005,7 @@ td.col-actions { text-align: right; }
 </div>
 
 <!-- ╔══════════════════════════════════════════════════════════════════╗
-     ║  CLIENT-SIDE JAVASCRIPT                                        ║
+     ║  CLIENT-SIDE JAVASCRIPT                                          ║
      ╚══════════════════════════════════════════════════════════════════╝ -->
 <script>
 'use strict';
@@ -1472,6 +1472,12 @@ App.Upload = (() => {
     onTypeChange();
   }
 
+  /*
+   * compresses an image given a base64 encoded data url, 
+   *   max pixel size to proportionally the source image to,
+   *   and the quality of the resulting compressed image.
+   * Returns a compressed image as a data url.
+  */
   function _compressImage(dataUrl, maxPx, quality) {
     return new Promise(function(resolve) {
       const img = new Image();
@@ -1493,7 +1499,9 @@ App.Upload = (() => {
   }
 
   /* 
-    Calls server side code to get the thumbnail data from storage
+    Future function which calls [serverGetThumbnail] from server side to get the thumbnail data from storage.
+    The result is cached in sessionStorage to reduce api calls.
+    Returns a promise that either includes the data from cloud or cache, or indicates a failure.
   */
   function _loadThumbnail(entityId, type) {
     const img         = document.getElementById('thumb-preview-img');
@@ -1530,6 +1538,11 @@ App.Upload = (() => {
       });
   }
 
+  /* 
+    Future function which calls [serverGetDescription] from server side to get the markdown description file.
+    The result is cached in sessionStorage to reduce api calls.
+    Returns a promise that either includes the data from cloud or cache, or indicates a failure.
+  */
   function _loadMarkdown(entityId, type) {
     const editor   = document.getElementById('md-editor');
     const preview  = document.getElementById('md-preview');
@@ -1556,6 +1569,46 @@ App.Upload = (() => {
         reject(err);
       })
       .serverGetDescription(entityId, type);
+    });
+  }
+
+  /* 
+    Future function which calls [serverGetGeography] from server side to get the GeoJSON file.
+    The result is cached in sessionStorage to reduce api calls.
+    Returns a promise that either includes the data from cloud or cache, or indicates a failure.
+  */
+  function _loadGeography(entityId, type) {
+    const latitude   = document.getElementById('upload-latitude');
+    const longitude  = document.getElementById('upload-longitude');
+    const cacheKeyLatitude  = 'geojson::' + entityId + 'latitude';
+    const cacheKeyLongitude = 'geojson::' + entityId + 'longitude';
+    const cachedLatitude    = sessionStorage.getItem(cacheKeyLatitude);
+    const cachedLongitude   = sessionStorage.getItem(cacheKeyLongitude);
+
+    return new Promise(function(resolve, reject) {
+      // Check cache first
+      if (cachedLatitude && cachedLongitude) {
+        latitude.value  = cachedLatitude;
+        longitude.value = cacheKeyLongitude;
+        resolve();
+        return;
+      }
+
+      // otherwise make server call and get from storage
+      google.script.run
+      .withSuccessHandler(function(coordinates) {
+        sessionStorage.setItem(cacheKeyLatitude, coordinates[1]);
+        sessionStorage.setItem(cacheKeyLongitude, coordinates[0]);
+        latitude.value  = coordinates[1];
+        longitude.value = coordinates[0];
+        resolve();
+      })
+      .withFailureHandler(function(err) {
+        latitude.value  = 'error loading';
+        longitude.value = 'error loading';
+        reject(err);
+      })
+      .serverGetGeography(entityId, type);
     });
   }
 
@@ -1588,14 +1641,17 @@ App.Upload = (() => {
     loader.style.display = 'block';
     content.style.display = 'none';
 
+    // all cloud api calls are made as promises
     Promise.all([
       _loadThumbnail(id, type),
-      _loadMarkdown(id, type)
+      _loadMarkdown(id, type),
+      _loadGeography(id, type)
     ])
-    .finally(function() {
-      loader.style.display = 'none';
-      content.style.display = 'block';
-    });
+      .finally(function() {
+        // hide the loader animation and show the edit modal content 
+        loader.style.display = 'none';
+        content.style.display = 'block';
+      });
     
     onTypeChange();
     document.getElementById('upload-overlay').classList.remove('hidden');
@@ -1929,15 +1985,23 @@ document.querySelectorAll('.drop-zone').forEach((zone) => {
   });
 });
 
-
-function onSuccess() {
-  console.log("Success!");
+// clean inputs to valid coordinates
+function cleanCoordinate(value) {
+  return value
+    .replace(/[^0-9.\-]/g, '')     // allow only digits, dot, minus
+    .replace(/(?!^)-/g, '')        // only one minus at start
+    .replace(/(\..*)\./g, '$1');   // only one decimal point
 }
 
-function onFailure() {
-  console.log("Failure!");
-}
+document.getElementById('upload-latitude').addEventListener('input', function () {
+  this.value = cleanCoordinate(this.value);
+});
 
+document.getElementById('upload-longitude').addEventListener('input', function () {
+  this.value = cleanCoordinate(this.value);
+});
+
+// Google login button on sign-in screen
 document.getElementById('google-login-btn').addEventListener('click', (event) => {
   App.Auth.loginWithGoogle();
 });
