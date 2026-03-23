@@ -73,32 +73,20 @@ class AssetService {
    * @param {string} lonStr - Longitude as string
    * @returns {Blob} GeoJSON blob
    */
-  static createGeoJSONBlob(latStr, lonStr) {
+  static createGeoJSONBlob(id, type, name, latStr, lonStr) {
     const lat = parseFloat(latStr);
     const lon = parseFloat(lonStr);
 
     if (isNaN(lat) || isNaN(lon)) {
       throw new Error("Invalid latitude or longitude");
     }
-
-    const geojson = {
-      type: "FeatureCollection",
-      features: [
-        {
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: [lon, lat] // GeoJSON uses [longitude, latitude]
-          },
-          properties: {}
-        }
-      ]
-    };
-
-    return new Blob(
-      [JSON.stringify(geojson)],
-      { type: "application/geo+json" }
-    );
+    // GeoJSON uses [longitude, latitude]
+    // also storing id, type, and name for helping the app
+    const geojson = {"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[lon, lat]},"properties":{"id":id,"type": type, "name":name}}]};
+    
+    const blob = Utilities.newBlob(JSON.stringify(geojson), 'application/geo+json');
+    console.log(`[AssetService.gs][createGeoJSONBlob] Created GeoJSON blob with latitude: ${lat}, longitude: ${lon}`);
+    return blob;
   }
 
   /**
@@ -142,65 +130,110 @@ class AssetService {
    *   4. Update master-hash.json and changelog.json.
    *
    * @param {Object} assetData - { id, type, name, latitude, longitude, files: { thumbnail, description, gallery[] } }
-   * @returns {{ success: boolean, assetId: string, errors: string[] }}
+   * @returns {{ success: boolean, entityId: string, error: string }}
    */
   static uploadAsset(assetData) {
     const { id, type, name, latitude, longitude, files } = assetData;
-    const errors = [];
 
-    console.log(`[AssetService.gs][uploadAsset]`);
-    console.log(`[AssetService.gs][uploadAsset] ID: ${id}`);
-    console.log(`[AssetService.gs][uploadAsset] Type: ${type}`);
-    console.log(`[AssetService.gs][uploadAsset] Name: ${name}`);
-    console.log(`[AssetService.gs][uploadAsset] Latitude: ${name}`);
-    console.log(`[AssetService.gs][uploadAsset] Longitude: ${name}`);
+    console.log(`[AssetService.gs][uploadAsset] ID: ${id}, Type: ${type}, Name: ${name}`);
+    console.log(`[AssetService.gs][uploadAsset]   Latitude: ${latitude}, Longitude: ${longitude}`);
 
-    // Validate type
+    // ── Validate type ──
     if (!CONFIG.ENTITY_TYPES.includes(type)) {
-      errors.push(`Unknown asset type: "${type}". Valid types: ${CONFIG.ENTITY_TYPES.join(', ')}`);
-      return { success: false, assetId: id, errors };
+      console.log('[AssetService.gs][uploadAsset] WARNING: Unknown asset type: "${type}');
+      return { 
+        success: false,
+        entityId: id,
+        error: `Unknown asset type: "${type}". Valid types: ${CONFIG.ENTITY_TYPES.join(', ')}`
+      };
     }
-
+    
+    // build the storage path for all object uploads
     const basePath = `${type}s/${id}`;
 
-    // Upload common files
-    if (files.thumbnail) {
-      // upload thumbnail
-      StorageService.uploadFile(`${basePath}/thumbnail.jpg`, files.thumbnail, 'image/jpeg');
-    } else {
+
+    // ── Validate upload data ──
+    const errors = [];
+
+    // check description
+    if (!files.description) {
+      // missing description
+      console.log('[AssetService.gs][uploadAsset] WARNING: Attempted to upload new asset with no description');
+      errors.push('Missing required file: description.md');
+    };
+
+    // check thumbnail
+    // for now, sign does not need a thumbnail
+    if (!files.thumbnail && type === 'tree') {
+      // missing thumbnail
+      console.log('[AssetService.gs][uploadAsset] WARNING: Attempted to upload new tree asset with no thumbnail image');
       errors.push('Missing required file: thumbnail.jpg');
     }
 
-    if (files.description) {
-      // upload description
-      StorageService.uploadFile(`${basePath}/description.md`, files.description, 'text/markdown');
-    } else {
-      errors.push('Missing required file: description.md');
+    // check gallery
+    // sign does not need a gallery
+    if (!files.gallery || (files.gallery === 0 && type === 'tree')) {
+      // missing gallery images
+      console.log('[AssetService.gs][uploadAsset] WARNING: Attempted to upload new tree asset with no gallery images');
+      errors.push('Missing gallery image(s)');
     }
 
-    // ── Upload type-specific files ─────────────────────────────────────────
-    if (type === 'tree') {
-      const galleryFiles = files.gallery || [];
-      if (galleryFiles.length === 0) {
-        console.log('[AssetService.gs]   → WARNING: Tree asset uploaded with no gallery images');
-      }
-      galleryFiles.forEach((galleryBlob, index) => {
-        const paddedIndex = String(index + 1).padStart(3, '0');
-        StorageService.uploadFile(`${basePath}/gallery-${paddedIndex}.jpg`, galleryBlob, 'image/jpeg');
-      });
-    }
-
+    // if there have been any errors abort the upload and report
     if (errors.length > 0) {
-      console.log(`[AssetService.gs] UPLOAD FAILED with ${errors.length} error(s):`, errors);
-      return { success: false, assetId: id, errors };
+      console.log(`[AssetService.gs][uploadAsset] UPLOAD FAILED with ${errors.length} error(s):`);
+      console.log(`    ${errors.join('    \n')}`);
+      return { success: false, entityId: id, error: errors.join('\n') };
+    }
+    // no errors, continue to upload
+
+    // ── Upload common files ──
+    
+    // begin HashService session
+    HashService.beginSession();
+
+    try {
+      // upload description
+      var descriptionResponse = StorageService.uploadFile(`${basePath}/description.md`, Utilities.newBlob(files.description), 'text/markdown');
+      HashService.stageFile(descriptionResponse);
+
+      var geojsonResponse = StorageService.uploadFile(`${basePath}/geography.geojson`, this.createGeoJSONBlob(id, type, name, latitude, longitude), 'application/geo+json');
+      HashService.stageFile(geojsonResponse);
+      
+      // ── Upload type-specific files ──
+      if (type === 'tree') {
+        // upload thumbnail
+        var thumbnailResponse = StorageService.uploadJpeg(`${basePath}/thumbnail.jpg`, base64FromDataUrl(files.thumbnail));
+        HashService.stageFile(thumbnailResponse);
+        
+        // upload at least one gallery image
+        files.gallery.forEach((galleryBlob, index) => {
+          // upload gallery images with the name 'gallery-' + image number
+          const paddedIndex = String(index + 1).padStart(3, '0');
+          
+          var galleryImageResponse = StorageService.uploadJpeg(`${basePath}/gallery-${paddedIndex}.jpg`, base64FromDataUrl(galleryBlob));
+          HashService.stageFile(galleryImageResponse);
+        });
+      }
+    } catch (e) {
+      // catch any upload issues
+      HashService.abortSession();
+      console.log(`[AssetService.gs][uploadAsset] Error while uploading files: ${e.message}`);
+      console.log(`[AssetService.gs][uploadAsset] Stack: ${e.stack}`);
+      return { success: false, entityId: id, error: e.message };
     }
 
-    // ── Post-upload side effects ───────────────────────────────────────────
-    HashService.updateMasterHash(id, type, 'upload');
-    HashService.appendChangelog(id, type, name, 'upload');
-
-    console.log(`[AssetService.gs] UPLOAD SUCCESS — Asset ${id} stored at gs://${CONFIG.BUCKET_NAME}/${basePath}/`);
-    return { success: true, assetId: id, errors: [] };
+    // ── Post-upload ──
+    try {
+      // ── Update catalog file ──
+      HashService.commitCatalog({ id: id, type: type, name: name });
+    } catch (e) {
+      // catch HashService issues
+      console.log(`[AssetService.gs][uploadAsset] Error while updating catalog file: ${e.message}`);
+      console.log(`[AssetService.gs][uploadAsset] Stack: ${e.stack}`);
+    }
+    
+    console.log(`[AssetService.gs][uploadAsset] UPLOAD SUCCESS — Asset ${id} stored at gs://${CONFIG.BUCKET_NAME}/${basePath}/`);
+    return { success: true, entityId: id, error: null };
   }
 
   /**

@@ -59,3 +59,7 @@ function base64ToHex(base64) {
   // 3. Join the array of hex strings into a single string and convert to uppercase for standard formatting.
   return hexArray.join('').toUpperCase();
 }
+
+function base64FromDataUrl(dataUrl) {
+  return dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+}

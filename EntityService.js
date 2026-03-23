@@ -9,129 +9,38 @@ class EntityService {
    * @param {string} assetId 
    */
   static getEntityName(assetId) {
-    console.log(`[EntityService.gs][getEntityName] looking for id: ${assetId}`);
-
-    const catalogFile = EntityService.loadCatalog();
-
-    if (catalogFile) {
-      // Find the entity by its ID
-      const entity = catalogFile.entities.find(entity => entity.id === assetId.trim());
-
-      console.log(`[EntityService.gs][getEntityName] entity name: ${entity.name}`);
-      return entity ? entity.name : 'MISSING NAME';
-    }
-
-    // entity id name pairs have not been retrieved
-    console.log(`[EntityService.gs][getEntityName] entity id name pairs have not been retrieved`);
-    return '';
-  }
-
-  /**
-   * Get the catalog file from GCS
-   */
-  static getCatalog() {
-    console.log(`[EntityService.gs][getCatalog] Fetching ${CONFIG.CATALOG_PATH}`);
-    // download the catalog json file
-    var blob = StorageService.downloadFile(CONFIG.CATALOG_PATH);
-    
-    // return the Blob to a JSON object
-    var catalogString = blob.getDataAsString();
-    PropertiesService.getScriptProperties().setProperty('CATALOG_FILE', catalogString);
-
-    console.log(`[EntityService.gs][getCatalog] ${catalogString}`);
-  }
-
-  /**
-   * 
-   * @returns JSON parsed string
-   */
-  static loadCatalog() {
-    const catalogString = PropertiesService.getScriptProperties().getProperty('CATALOG_FILE');
-
-    if (!catalogString) {
-      return null;
-    }
-
-    return JSON.parse(catalogString);
+    const catalog = HashService.getCatalog();
+    const entity = catalog.entities.find(e => e.id === assetId.trim());
+    return entity ? entity.name : 'MISSING NAME';
   }
 
   /**
    * List entites of a specific type
+   * @param {string} a valid type ('tree' || 'sign')
    */
   static listEntities(type) {
-    console.log(`[EntityService.gs][listEntities] Fetching entities of type: ${type}`);
-    var entities = [];
-    //const prefixes = StorageService.listObjects(`${type}s/`, '/').prefixes;
-    
-    // create HTTP request url 
-    const url = `https://storage.googleapis.com/storage/v1/b/${CONFIG.BUCKET_NAME}/o?prefix=${type}s/&delimiter=/`;
+    const catalog = HashService.getCatalog();
+    const entities = catalog.entities
+      .filter(e => e.type === type)
+      .map(e => new Entity(e.id, e.type, e.name, '', ''));
 
-    const service = AuthService._getCloudService();
-
-    if (!service.hasAccess()) {
-      console.log('[EntityService.gs][listEntities] No valid OAuth session');
-    }
-
-    const token = service.getAccessToken();
-
-    // use UrlFetchApp.fetch to send GET to GCS 
-    console.log(`[EntityService.gs][listEntities] GET ${url}`);
-    var response = UrlFetchApp.fetch(url, {
-      headers: {
-        Authorization: 'Bearer ' + token
-      },
-      'muteHttpExceptions': true
-    });
-
-    if (response.getResponseCode() !== 200) {
-      const errorText = response.getContentText();
-      throw new Error(`list failed: ${response.status} ${errorText}`);
-    }
-    
-    const prefixes = JSON.parse(response.getContentText()).prefixes;
-
-
-    if (prefixes && prefixes.length > 0) {
-      prefixes.forEach((object) => {
-        var assetId = AssetService.getAssetId(object, type);
-        var entityName = EntityService.getEntityName(assetId);
-        entities.push(new Entity(
-          assetId,
-          type,
-          entityName,
-          '',
-          ''
-        ));
-        console.log(`[EntityService.gs][listEntities] added entity: ${object}`);
-      });
-    }
-
+    console.log(`[EntityService.gs][listEntities] Found ${entities.length} entities of type "${type}": ${entities.map(e => e.id).join(', ')}`);
     return entities;
-  }
-
-  static listAllEntities() {
-    console.log('[EntityService.gs][listAllEntities]');
-    var allEntities = [];
-
-    for (const type of CONFIG.ENTITY_TYPES) {
-      allEntities.push(...EntityService.listEntities(type));
-    }
-
-    console.log(`[EntityService.gs][listAllEntities] LIST COMPLETE - Returning ${allEntities.length} entities`);
-    return allEntities;
   }
 
   static uploadEntity() {}
   static deleteEntity() {}
 }
 
-//  Exposed server functions (called via google.script.run from the client)
-
-function serverListAllEntities() {
-  return EntityService.listAllEntities();
+// Exposed server functions (called via google.script.run from the client)
+function serverListEntities(type) {
+  return EntityService.listEntities(type);
 }
 
-
-function serverGetCatalog() {
-  return EntityService.getCatalog();
+function serverListAllEntities() {
+  var entities = [];
+  for (const type of CONFIG.ENTITY_TYPES){ 
+    entities.push(...EntityService.listEntities(type));
+  }
+  return entities;
 }

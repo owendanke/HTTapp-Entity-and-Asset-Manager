@@ -878,7 +878,7 @@ td.col-actions { text-align: right; }
                   <span class="plus">+</span>
                   <span>Add</span>
                 </button>
-                <input type="file" id="gallery-file-input" accept="image/*" multiple style="display:none"
+                <input type="file" id="gallery-file-input" accept="image/jpeg" multiple style="display:none"
                   onchange="App.Upload.addGalleryImages(this.files)">
               </div>
             </div>
@@ -937,7 +937,7 @@ td.col-actions { text-align: right; }
                   <span>Click to upload</span>
                 </div>
                 <img id="thumb-preview-img" style="display:none">
-                <input type="file" accept="image/*" onchange="App.Upload.onFileSelect('thumbnail', this)">
+                <input type="file" accept="image/jpeg" onchange="App.Upload.onFileSelect('thumbnail', this)">
               </div>
               <div class="thumb-label">Thumbnail Image</div>
             </div>
@@ -1042,73 +1042,6 @@ const ServerBridge = (() => {
         .withFailureHandler(reject)[fnName](...args);
     });
   }
-
-  // ── Stub response definitions ──────────────────────────────────
-  /*
-  const _stubs = {
-
-    serverGetAuthUrl() {
-      console.log('[ServerBridge][serverGetAuthUrl]');
-
-      console.log('  → Would call Auth.gs AuthService.getAuthorizationUrl()');
-      console.log('  → Would return: https://accounts.google.com/o/oauth2/auth?client_id=...&redirect_uri=...&scope=openid+email+profile');
-      // Return a stub sentinel so the client popup flow can complete
-      return '__STUB_AUTH__';
-    },
-
-    serverCheckSession() {
-      console.log('[ServerBridge stub] serverCheckSession()');
-      console.log('  → Would call Auth.gs AuthService.checkSession()');
-      console.log('  → Would validate stored OAuth2 token in PropertiesService');
-      return { authenticated: true, user: { name: 'Dev User', email: 'dev.user@httapp.com' } };
-    },
-
-    serverSignOut() {
-      console.log('[ServerBridge stub] serverSignOut()');
-      console.log('  → Would call Auth.gs AuthService.signOut()');
-      console.log('  → Would POST https://oauth2.googleapis.com/revoke?token=<access_token>');
-      console.log('  → Would clear PropertiesService user session');
-      return { success: true };
-    },
-
-    serverListAssets() {
-      console.log('[ServerBridge stub] serverListAssets()');
-      console.log('  → Would call AssetService.listAllAssets()');
-      console.log('  → Would GET gs://your-bucket/trees/ and gs://your-bucket/signs/');
-      return [
-        { id: 'tree-oak-001',       type: 'tree', name: 'Heritage Oak — Riverside',       dateUploaded: '2025-01-14' },
-        { id: 'tree-maple-002',     type: 'tree', name: 'Red Maple — North Trail',         dateUploaded: '2025-02-03' },
-        { id: 'sign-trailhead-001', type: 'sign', name: 'Trailhead Marker — East Entrance',dateUploaded: '2025-02-10' },
-        { id: 'sign-info-002',      type: 'sign', name: 'Info Kiosk — Visitor Center',     dateUploaded: '2025-03-01' },
-        { id: 'tree-pine-003',      type: 'tree', name: 'Longleaf Pine — South Ridge',     dateUploaded: '2025-03-15' },
-      ];
-    },
-
-    serverUploadAsset(assetData) {
-      console.log('[ServerBridge stub] serverUploadAsset()', assetData);
-      //console.log(`  → Would call AssetService.uploadAsset({ id: "${assetData.id}", type: "${assetData.type}" })`);
-      //console.log(`  → Would upload files to gs://your-bucket/${assetData.type}s/${assetData.id}/`);
-      //console.log('  → Would update master-hash.json and append to changelog.json');
-      return { success: true, assetId: assetData.id, errors: [] };
-    },
-
-    serverDeleteAsset(id, type, name) {
-      console.log(`[ServerBridge stub] serverDeleteAsset("${id}", "${type}", "${name}")`);
-      //console.log(`  → Would call AssetService.deleteAsset("${id}", "${type}")`);
-      //console.log(`  → Would DELETE all objects under gs://your-bucket/${type}s/${id}/`);
-      //console.log('  → Would update master-hash.json and append to changelog.json');
-      return { success: true };
-    },
-
-    serverEditAsset(id, type, updates) {
-      console.log(`[ServerBridge stub] serverEditAsset("${id}", "${type}")`, updates);
-      //console.log(`  → Would call AssetService.editAsset("${id}", "${type}", updates)`);
-      //console.log(`  → Would overwrite changed files in gs://your-bucket/${type}s/${id}/`);
-      //console.log('  → Would update master-hash.json and append to changelog.json');
-      return { success: true };
-    },
-  };
-  */
 
   return {
     getAuthUrl:  ()                    => _run('serverGetAuthUrl'),
@@ -1612,13 +1545,19 @@ App.Upload = (() => {
     });
   }
 
+  /**
+   * Upload modal for adding new entities
+  */
   function open() {
     _mode = 'upload'; _editId = null; _editType = null;
     _reset();
     document.getElementById('upload-modal-title').textContent = 'Upload New Entity';
     document.getElementById('upload-submit-label').textContent = 'Upload';
     document.getElementById('upload-overlay').classList.remove('hidden');
+
+    onTypeChange();
   }
+
   /**
    * Upload modal modified for editing entities
   */
@@ -1666,27 +1605,29 @@ App.Upload = (() => {
   function onTypeChange() {
     const type = document.getElementById('upload-type').value;
     const gallerySection = document.getElementById('gallery-section');
+    const thumbSection = document.querySelector('.thumb-section');
     const geojsonSection = document.getElementById('geojson-section');
     const coordinateSection = document.getElementById('coordinates-section')
 
-    // hide/show the gallery section
+    // gallery and thumbnail: tree only
     if (type === 'tree') {
       gallerySection.classList.remove('hidden');
-    } 
-    else {
+      thumbSection.classList.remove('hidden');
+    } else {
       gallerySection.classList.add('hidden');
+      thumbSection.classList.add('hidden');
       _galleryImages = []; _files.gallery = [];
       _renderGallery();
     }
 
-    // hide/show the GeoJSON or coordinate section
+    // coordinates: tree and sign
     if (type === 'tree' || type === 'sign') {
-      geojsonSection.classList.add('hidden');
       coordinateSection.classList.remove('hidden');
-    }
-    else {
-      geojsonSection.classList.remove('hidden');
+      geojsonSection.classList.add('hidden');
+    } else {
+      // unknown future type: show geojson, hide coordinates
       coordinateSection.classList.add('hidden');
+      geojsonSection.classList.remove('hidden');
     }
 
     _renderChecklist();
@@ -1700,7 +1641,9 @@ App.Upload = (() => {
     if (key === 'thumbnail') {
       const reader = new FileReader();
       reader.onload = (e) => {
-        document.getElementById('thumb-preview-img').src = e.target.result;
+        const dataUrl = e.target.result;
+        _files[key] = dataUrl;
+        document.getElementById('thumb-preview-img').src = dataUrl;
         document.getElementById('thumb-preview-img').style.display = 'block';
         document.getElementById('thumb-placeholder').style.display = 'none';
       };
@@ -1711,7 +1654,10 @@ App.Upload = (() => {
     }
     if (key === 'description') {
       const reader = new FileReader();
-      reader.onload = (e) => { document.getElementById('md-editor').value = e.target.result; };
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        _files[key] = dataUrl;
+        document.getElementById('md-editor').value = dataUrl; };
       reader.readAsText(file);
     }
     _renderChecklist();
@@ -1719,11 +1665,15 @@ App.Upload = (() => {
 
   function addGalleryImages(fileList) {
     for (const f of fileList) {
-      _galleryImages.push(f);
-      _files.gallery = _galleryImages;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        _galleryImages.push(e.target.result); // base64 string, not File
+        _files.gallery = _galleryImages;
+        _renderGallery();
+        _renderChecklist();
+      };
+      reader.readAsDataURL(f);
     }
-    _renderGallery();
-    _renderChecklist();
   }
 
   function _removeGalleryImage(index) {
@@ -1744,13 +1694,11 @@ App.Upload = (() => {
     // Remove old thumb elements
     carousel.querySelectorAll('.gallery-thumb').forEach((el) => el.remove());
 
-    _galleryImages.forEach((file, idx) => {
-      const reader = new FileReader();
+    _galleryImages.forEach((dataUrl, idx) => {
       const thumb  = document.createElement('div');
       thumb.className = 'gallery-thumb';
       thumb.innerHTML = `<img><button class="gallery-thumb-remove" onclick="App.Upload._removeGalleryImage(${idx})" title="Remove">✕</button>`;
-      reader.onload = (e) => thumb.querySelector('img').src = e.target.result;
-      reader.readAsDataURL(file);
+      thumb.querySelector('img').src = dataUrl;
       carousel.insertBefore(thumb, addBtn);
     });
   }
@@ -1787,15 +1735,11 @@ App.Upload = (() => {
   }
 
   function onMdEdit() {
-    
-    var mdValue = document.getElementById('md-editor').value
-    
-    // Sync to description to blob for later upload
+    const mdValue = document.getElementById('md-editor').value;
+
     if (mdValue) {
-      _files.description = new Blob([mdValue], { type: 'text/markdown' });
-    }
-    // delete blob when description is empty
-    else {
+      _files.description = mdValue; // plain string, no Blob needed
+    } else {
       delete _files.description;
     }
 
@@ -1843,6 +1787,8 @@ App.Upload = (() => {
     const latitude = document.getElementById('upload-latitude').value.trim();
     const longitude = document.getElementById('upload-longitude').value.trim();
 
+    var result = {};
+
     if (!id)   { Toast.error('Entity ID is required.');   return; }
     if (!name) { Toast.error('Entity Name is required.'); return; }
 
@@ -1852,22 +1798,20 @@ App.Upload = (() => {
     document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? 'Saving...' : 'Uploading...';
 
     if (_mode === 'upload') {
-
-
-      if (type === 'tree' || tree === 'sign') {
+      if (type === 'tree' || type === 'sign') {
         // do not need to send geometry, but do need lat long
-        const result = await ServerBridge.uploadAsset({
+        result = await ServerBridge.uploadAsset({
           id, type, name, latitude, longitude,
           files: {
             thumbnail:   _files.thumbnail || null,
             description: _files.description || null,
-            gallery:     _galleryImages,
+            gallery:     _galleryImages || null,
           },
         });
       }
       else {
         // do not have lat long, but do need to send geometry
-        const result = await ServerBridge.uploadAssetGeometry({
+        result = await ServerBridge.uploadAssetGeometry({
           id, type, name,
           files: {
             thumbnail:   _files.thumbnail || null,
@@ -1881,9 +1825,13 @@ App.Upload = (() => {
       if (result.success) {
         App.Table.addEntity({ id, type, name, dateModified: new Date().toISOString().split('T')[0] });
         Toast.success(`Entity "${name}" uploaded successfully.`);
+        // Reset button
+        document.getElementById('upload-spinner').classList.remove('visible');
+        document.getElementById('upload-submit-btn').disabled = false;
+        document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
         close();
       } else {
-        Toast.error('Upload failed: ' + (result.errors?.join(', ') || 'Unknown error'));
+        Toast.error('Upload failed: ' + (result.error || 'Unknown error'));
       }
     } 
     // Edit mode
@@ -1898,6 +1846,10 @@ App.Upload = (() => {
       if (result.success) {
         App.Table.updateEntity({ id: _editId, name });
         Toast.success(`Entity "${name}" updated successfully.`);
+        // Reset button
+        document.getElementById('upload-spinner').classList.remove('visible');
+        document.getElementById('upload-submit-btn').disabled = false;
+        document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
         close();
       } else {
         Toast.error('Save failed.');

@@ -56,27 +56,44 @@ class StorageService {
 
   /**
    * Uploads a file (Blob) to a GCS object path.
-   * @param {string} objectPath - Full GCS object path, e.g. "trees/tree-id-1/thumbnail.jpg"
+   * This function CANNOT handle byte data like a jpeg.
+   * @param {string} objectPath - Full GCS object path, e.g. "trees/tree-id-1/description.md"
    * @param {Blob}   fileBlob   - The file data as a Blob.
    * @param {string} mimeType   - MIME type of the file.
+   * @throws {Error} Throws a new Error if the response is not 200
    */
   static uploadFile(objectPath, fileBlob, mimeType) {
-    console.log(`[StorageService.gs][uploadFile]`);
+    const service = AuthService._getCloudService();
+    if (!service.hasAccess()) {
+      throw new Error('[StorageService.gs][uploadFile] No valid OAuth session');
+    }
 
     const url = `https://storage.googleapis.com/upload/storage/v1/b/${CONFIG.BUCKET_NAME}/o?uploadType=multipart`;
     const token = service.getAccessToken();
 
+    // Build multipart body: metadata part + media part
+    const metadata = JSON.stringify({ name: objectPath, contentType: mimeType });
+    const boundary = 'XXX_MULTI-PART_BOUNDARY_XXX';
+
+    const body = Utilities.newBlob(
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`
+    ).getBytes()
+      .concat(fileBlob.getBytes())
+      .concat(Utilities.newBlob(`\r\n--${boundary}--`).getBytes());
+    
     // use UrlFetchApp.fetch to send GET to GCS 
     console.log(`[StorageService.gs][uploadFile] POST ${url}`);
     var response = UrlFetchApp.fetch(url, {
       method: "POST",
       headers: {
-        Authorization: 'Bearer ' + token
+        Authorization: 'Bearer ' + token,
+        'Content-Type': `multipart/related; boundary="${boundary}"`
       },
-      body: blob
+      payload: Utilities.newBlob(body, `multipart/related; boundary="${boundary}"`),
+      muteHttpExceptions: true
     });
 
-    if (!response.ok) {
+    if (response.getResponseCode() !== 200) {
       const errorText = response.getContentText();
       throw new Error(`Upload failed: ${response.status} ${errorText}`);
     }
@@ -87,9 +104,45 @@ class StorageService {
   }
 
   /**
+   * 
+   * @param {string} objectPath   - Full GCS object path, e.g. "trees/tree-id-1/thumbnail.jpg"
+   * @param {string} base64String - base64 encoded byte data
+   * @returns 
+   */
+  static uploadJpeg(objectPath, base64String) {
+    console.log(`[StorageService.gs][uploadJpeg] ${objectPath}`);
+
+    const service = AuthService._getCloudService();
+    if (!service.hasAccess()) {
+      throw new Error('[StorageService.gs][uploadJpeg] No valid OAuth session');
+    }
+
+    const url = `https://storage.googleapis.com/upload/storage/v1/b/${CONFIG.BUCKET_NAME}/o?uploadType=media&name=${encodeURIComponent(objectPath)}`;
+    const token = service.getAccessToken();
+
+    const response = UrlFetchApp.fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer ' + token,
+        'Content-Type': 'image/jpeg'
+      },
+      payload: Utilities.base64Decode(base64String),
+      muteHttpExceptions: true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      throw new Error(`Upload failed: ${response.getResponseCode()} ${response.getContentText()}`);
+    }
+
+    var data = JSON.parse(response.getContentText());
+    return { objectPath, success: true, md5Hash: data.md5Hash };
+  }
+
+  /**
    * Downloads a file from GCS as a Blob.
    * @param {string} objectPath - Full GCS object path.
    * @returns {Blob} The file content.
+   * @throws {Error} Throws a new Error if the response is not 200
    */
   static downloadFile(objectPath) {
     console.log(`[StorageService.gs][downloadFile] path: ${objectPath}`);
@@ -121,6 +174,44 @@ class StorageService {
     }
     
     return response.getBlob();
+  }
+
+  /**
+   * Retrieves metadata for a specified GCS object.
+   * @param {string} objectPath - Full GCS object path.
+   * @returns {Blob} The file content.
+   * @throws {Error} Throws a new Error if the response is not 200
+   */
+  static objectMetadata(objectPath) {
+    console.log(`[StorageService.gs][objectMetadata] path: ${objectPath}`);
+
+    // create HTTP request url 
+    const url = `https://storage.googleapis.com/storage/v1/b/${CONFIG.BUCKET_NAME}/o/${encodeURIComponent(objectPath)}?alt=json`;
+
+    const service = AuthService._getCloudService();
+
+    if (!service.hasAccess()) {
+      console.log('[StorageService.gs][objectMetadata] No valid OAuth session');
+    }
+
+    const token = service.getAccessToken();
+
+    // use UrlFetchApp.fetch to send GET to GCS 
+    console.log(`[StorageService.gs][objectMetadata] GET ${url}`);
+
+    var response = UrlFetchApp.fetch(url, {
+      headers: {
+        Authorization: 'Bearer ' + token
+      },
+      'muteHttpExceptions': true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      const errorText = response.getContentText();
+      throw new Error(`list failed: ${response.status} ${errorText}`);
+    }
+
+    return JSON.parse(response.getContentText());
   }
 
   /**
