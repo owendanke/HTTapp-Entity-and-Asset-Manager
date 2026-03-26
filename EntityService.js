@@ -22,7 +22,7 @@ class EntityService {
     const catalog = HashService.getCatalog();
     const entities = catalog.entities
       .filter(e => e.type === type)
-      .map(e => new Entity(e.id, e.type, e.name, '', ''));
+      .map(e => new Entity(e.id, e.type, e.name, e.lastModified, ''));
 
     console.log(`[EntityService.gs][listEntities] Found ${entities.length} entities of type "${type}": ${entities.map(e => e.id).join(', ')}`);
     return entities;
