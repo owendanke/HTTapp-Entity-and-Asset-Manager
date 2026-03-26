@@ -1522,7 +1522,7 @@ App.Upload = (() => {
       // Check cache first
       if (cachedLatitude && cachedLongitude) {
         latitude.value  = cachedLatitude;
-        longitude.value = cacheKeyLongitude;
+        longitude.value = cachedLongitude;
         resolve();
         return;
       }
