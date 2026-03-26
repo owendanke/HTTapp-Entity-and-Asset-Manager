@@ -60,7 +60,7 @@ var HashService = (function () {
   function _computeMasterHash(filesMap) {
     var sortedKeys = Object.keys(filesMap).sort();
     var combined = sortedKeys.map(function (k) {
-      return k + ':' + filesMap[k];
+      return k + ':' + filesMap[k].md5Hash;
     }).join('|');
 
     var bytes = Utilities.computeDigest(
@@ -131,7 +131,7 @@ var HashService = (function () {
         throw new Error('[HashService][stageFile] uploadResponse is missing objectPath or md5Hash.');
       }
 
-      _staged[path] = hash;
+      _staged[path] = { md5Hash: hash, lastModified: uploadResponse.lastModified };
       console.log('[HashService][stageFile] Staged: ' + path + ' → ' + hash);
     },
 
@@ -158,11 +158,11 @@ var HashService = (function () {
         // 1. Load the current catalog from GCS
         var catalog = _loadCatalog();
 
-        // 2. Upsert the entity record
+        // 2. Insert the entity record
         var existingIndex = catalog.entities.findIndex(function (e) {
           return e.id === entityMeta.id;
         });
-        var entityRecord = { id: entityMeta.id, type: entityMeta.type, name: entityMeta.name };
+        var entityRecord = { id: entityMeta.id, type: entityMeta.type, name: entityMeta.name, lastModified: new Date().toISOString() };
 
         if (existingIndex >= 0) {
           catalog.entities[existingIndex] = entityRecord;

@@ -100,7 +100,7 @@ class StorageService {
 
     var data = JSON.parse(response.getContentText());
 
-    return { objectPath, success: true, md5Hash: data.md5Hash };
+    return { objectPath, success: true, md5Hash: data.md5Hash, lastModified: data.updated };
   }
 
   /**
@@ -135,7 +135,7 @@ class StorageService {
     }
 
     var data = JSON.parse(response.getContentText());
-    return { objectPath, success: true, md5Hash: data.md5Hash };
+    return { objectPath, success: true, md5Hash: data.md5Hash, lastModified: data.updated };
   }
 
   /**
