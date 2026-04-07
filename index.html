@@ -740,6 +740,119 @@ td.col-actions { text-align: right; }
 .delete-desc { font-size: 13px; color: var(--text-muted); margin-bottom: 24px; line-height: 1.5; }
 .delete-actions { display: flex; justify-content: flex-end; gap: 8px; }
 
+/* ══════════════════════════════════════════════════════════════════
+   VIEW MODAL
+══════════════════════════════════════════════════════════════════ */
+#view-overlay .modal {
+  width: 820px;
+  max-width: 96vw;
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.view-gallery {
+  display: flex;
+  gap: 8px;
+  padding: 14px;
+  overflow-x: auto;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--border);
+  min-height: 110px;
+  align-items: center;
+}
+.view-gallery::-webkit-scrollbar { height: 4px; }
+
+.view-gallery-thumb {
+  width: 90px; height: 90px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border-hi);
+  overflow: hidden; flex-shrink: 0;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.view-gallery-thumb:hover { border-color: var(--accent); }
+.view-gallery-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.view-gallery-thumb.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+
+.view-gallery-empty {
+  color: var(--text-muted); font-size: 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+
+.view-main-row {
+  display: flex; gap: 20px;
+  padding: 20px 24px;
+  flex-shrink: 0;
+}
+
+.view-thumb-col {
+  flex-shrink: 0; width: 220px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+
+.view-thumb-img {
+  width: 100%; aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  display: block;
+}
+
+.view-thumb-placeholder {
+  width: 100%; aspect-ratio: 1;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface2);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 12px;
+}
+
+.view-props-col {
+  flex: 1; display: flex; flex-direction: column; gap: 10px;
+}
+
+.view-prop {
+  display: flex; flex-direction: column; gap: 3px;
+}
+.view-prop-label {
+  font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.05em;
+  color: var(--text-muted); font-family: var(--mono);
+}
+.view-prop-value {
+  font-size: 13px; color: var(--text);
+}
+.view-prop-value.mono { font-family: var(--mono); font-size: 12px; }
+
+.view-description {
+  padding: 0 24px 20px;
+  border-top: 1px solid var(--border);
+}
+.view-description-label {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-dim); padding: 12px 0 10px;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.view-description-content {
+  font-size: 13px; color: var(--text-dim);
+  line-height: 1.7;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  min-height: 80px;
+}
+.view-description-content h1,
+.view-description-content h2,
+.view-description-content h3 { color: var(--text); margin-bottom: 6px; }
+.view-description-content p  { margin-bottom: 8px; }
+.view-description-content strong { color: var(--accent-hi); }
+.view-description-content code {
+  font-family: var(--mono); background: var(--bg);
+  padding: 1px 5px; border-radius: 3px; font-size: 11px;
+}
+
 /* ── Spin loader ─────────────────────────────────────────────────── */
 .spinner {
   width: 14px; height: 14px; border-radius: 50%;
@@ -989,8 +1102,83 @@ td.col-actions { text-align: right; }
 </div>
 
 <!-- ╔══════════════════════════════════════════════════════════════════╗
-     ║  DELETE CONFIRM MODAL                                            ║
+     ║  VIEW MODAL                                                      ║
      ╚══════════════════════════════════════════════════════════════════╝ -->
+<div id="view-overlay" class="overlay hidden">
+  <div class="modal">
+
+    <!-- Header -->
+    <div class="modal-header">
+      <span class="modal-title" id="view-modal-title">View Entity</span>
+      <button class="btn-icon" onclick="App.View.close()">✕</button>
+    </div>
+
+    <!-- Gallery strip -->
+    <div class="view-gallery" id="view-gallery">
+      <div class="view-gallery-empty">
+        <span>◫</span><span>Loading gallery...</span>
+      </div>
+    </div>
+
+    <!-- Thumbnail + Properties -->
+    <div class="view-main-row">
+
+      <div class="view-thumb-col">
+        <div class="view-thumb-placeholder" id="view-thumb-placeholder">Loading...</div>
+        <img id="view-thumb-img" class="view-thumb-img" style="display:none">
+      </div>
+
+      <div class="view-props-col">
+        <div class="view-prop">
+          <span class="view-prop-label">Entity ID: </span>
+          <span class="view-prop-value mono" id="view-prop-id">—</span>
+        </div>
+        <div class="view-prop">
+          <span class="view-prop-label">Type: </span>
+          <span class="view-prop-value" id="view-prop-type">—</span>
+        </div>
+        <div class="view-prop">
+          <span class="view-prop-label">Name: </span>
+          <span class="view-prop-value" id="view-prop-name">—</span>
+        </div>
+        <div class="view-prop">
+          <span class="view-prop-label">Latitude</span>
+          <span class="view-prop-value mono" id="view-prop-lat">—</span>
+        </div>
+        <div class="view-prop">
+          <span class="view-prop-label">Longitude</span>
+          <span class="view-prop-value mono" id="view-prop-lon">—</span>
+        </div>
+        <div class="view-prop">
+          <span class="view-prop-label">Last Modified</span>
+          <span class="view-prop-value mono" id="view-prop-date">—</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Description -->
+    <div class="view-description">
+      <div class="view-description-label">Description</div>
+      <div class="view-description-content" id="view-description-content">
+        Loading description...
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="modal-footer">
+      <span></span>
+      <button class="btn btn-ghost" onclick="App.View.close()">Close</button>
+    </div>
+
+  </div>
+</div>
+
+<!-- ╔══════════════════════════════════════════════════════════════════╗
+     ║  OVERLAY MODALS                                                  ║
+     ╚══════════════════════════════════════════════════════════════════╝ -->
+
+<!-- DELETE OVERLAY -->
 <div id="delete-overlay" class="overlay hidden">
   <div class="modal">
     <div class="delete-icon">🗑</div>
@@ -1003,6 +1191,22 @@ td.col-actions { text-align: right; }
       <button class="btn btn-danger" id="delete-confirm-btn" onclick="App.Delete.confirm()">
         <div class="spinner" id="delete-spinner"></div>
         <span id="delete-confirm-label">Delete Entity</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ID EDIT OVERLAY -->
+<div id="id-change-overlay" class="overlay hidden">
+  <div class="modal">
+    <div class="delete-icon">⚠️</div>
+    <div class="delete-title">Change Entity ID?</div>
+    <div class="delete-desc" id="id-change-desc"></div>
+    <div class="delete-actions">
+      <button class="btn btn-ghost" onclick="App.IdChange.cancel()">Cancel</button>
+      <button class="btn btn-danger" id="id-change-confirm-btn" onclick="App.IdChange.confirm()">
+        <div class="spinner" id="id-change-spinner"></div>
+        <span id="id-change-confirm-label">Confirm ID Change</span>
       </button>
     </div>
   </div>
@@ -1052,10 +1256,11 @@ const ServerBridge = (() => {
     checkSession:()                    => _run('serverCheckSession'),
     signOut:     ()                    => _run('serverSignOut'),
     getCatalog:  ()                    => _run('serverGetCatalog'),
+    getGallery: (id, type)         => _run('serverGetGallery', id, type),
     listAllEntities:  ()               => _run('serverListAllEntities'),
-    uploadAsset: (data)                => _run('serverUploadAsset', data),
-    deleteAsset: (id, type, name)      => _run('serverDeleteAsset', id, type, name),
-    editAsset:   (id, type, updates)   => _run('serverEditAsset', id, type, updates),
+    uploadEntity: (data)               => _run('serverUploadEntity', data),
+    deleteEntity: (id, type, name)     => _run('serverDeleteEntity', id, type, name),
+    editEntity:   (id, type, updates)  => _run('serverEditEntity', id, type, updates),
   };
 })();
 
@@ -1147,24 +1352,7 @@ App.Auth = (() => {
 
     console.log(`[Auth] Auth URL received`);
 
-    // ── Stub path: __STUB_AUTH__ means APIs aren't wired yet ──────────────
-    /*
-    if (authUrl === '__STUB_AUTH__') {
-      console.log('[Auth] STUB: skipping real popup, calling serverCheckSession() directly');
-      label.textContent = 'Verifying...';
-      const session = await ServerBridge.checkSession();
-      if (session.authenticated) {
-        _showApp(session.user);
-        Toast.success(`Welcome, ${session.user.name}!`);
-      } else {
-        _showLoginError('Authentication failed. Please try again.');
-        _resetLoginBtn();
-      }
-      return;
-    }
-    */
-
-    // ── Production path: open the real Google OAuth URL in a popup ─────────
+    // --- open Google OAuth URL in a popup ---
     const popupWidth  = 520;
     const popupHeight = 640;
     const left   = Math.round(window.screenX + (window.outerWidth  - popupWidth)  / 2);
@@ -1274,7 +1462,8 @@ App.Table = (() => {
         <td class="mono muted" style="font-size:12px">${_formatDate(a.lastModified)}</td>
         <td class="col-actions">
           <div class="action-buttons">
-            <button class="btn btn-primary" title="View">View</button>
+            <button class="btn btn-primary" title="View"
+              onclick="App.View.open('${a.id}','${a.type}','${a.name.replace(/'/g,"\\'")}','${a.lastModified}')">View</button>
             <button class="btn btn-primary" title="Edit"
               onclick="App.Upload.openEdit('${a.id}','${a.type}','${a.name.replace(/'/g,"\\'")}')">Edit</button>
             <button class="btn btn-danger" title="Delete"
@@ -1322,8 +1511,8 @@ App.Table = (() => {
   }
 
   function updateEntity(updated) {
-    const idx = _entities.findIndex((a) => a.id === updated.id);
-    if (idx >= 0) _entities[idx] = { ..._entities[idx], ...updated };
+    const idx = _entities.findIndex((a) => a.id === (updated.oldId || updated.id));
+    if (idx >= 0) _entities[idx] = { ..._entities[idx], ...updated, id: updated.id };
     filter();
   }
 
@@ -1335,7 +1524,195 @@ App.Table = (() => {
 })();
 
 /* ────────────────────────────────────────────────────────────────────
-   App.Upload — upload / edit modal
+   App.Utilities - Utilities for loading data from GCS
+──────────────────────────────────────────────────────────────────── */
+App.Utilities = (() => {
+
+  /*
+   * compresses an image given a base64 encoded data url, 
+   *   max pixel size to proportionally the source image to,
+   *   and the quality of the resulting compressed image.
+   * Returns a compressed image as a data url.
+  */
+  function compressImage(dataUrl, maxPx, quality) {
+    return new Promise(function(resolve) {
+      const img = new Image();
+      img.onload = function() {
+        // Scale down proportionally to fit within maxPx
+        const scale  = Math.min(maxPx / img.width, maxPx / img.height, 1);
+        const width  = Math.round(img.width  * scale);
+        const height = Math.round(img.height * scale);
+
+        const canvas    = document.createElement('canvas');
+        canvas.width    = width;
+        canvas.height   = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+        resolve(canvas.toDataURL('image/jpeg', quality)); // 0.0–1.0
+      };
+      img.src = dataUrl;
+    });
+  }
+
+  function mdToHtml(md) {
+    // Simple markdown converter (no deps)
+    return md
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g,    '<em>$1</em>')
+      .replace(/`(.+?)`/g,      '<code>$1</code>')
+      .replace(/\n\n/g,         '</p><p>')
+      .replace(/^(?!<[h1-6]|<\/p>)(.+)$/gm, '<p>$1</p>')
+      || '<p class="muted">Nothing to preview yet.</p>';
+  }
+
+  /** 
+   * Future function which calls [serverGetThumbnail] from server side to get the thumbnail data from storage.
+   * The result is cached in sessionStorage to reduce api calls.
+   * Returns a promise that either includes the data from cloud or cache, or indicates a failure.
+   * @param {HTMLElement} imgEl - HTMLElement for thumbnail image
+   * @param {HTMLElement} placeholderEl - HTMLElement for image placeholder
+  */
+  function loadThumbnail(id, type, imgEl, placeholderEl) {
+    const cacheKey    = 'thumbnail::' + id;
+    const cached      = sessionStorage.getItem(cacheKey);
+
+    return new Promise(function(resolve, reject) {
+      // Check cache first
+      if (cached) {
+        imgEl.src = cached;
+        imgEl.style.display = 'block';
+        placeholderEl.style.display = 'none';
+        resolve();
+        return; 
+      }
+
+      // otherwise make server call and get from storage
+      google.script.run
+        .withSuccessHandler(async function(dataUrl) {
+          const compressed = await App.Utilities.compressImage(dataUrl, 200, 0.75);
+          sessionStorage.setItem(cacheKey, compressed);  // store compressed image in cache
+          imgEl.src = compressed;
+          imgEl.style.display = 'block';
+          placeholderEl.style.display = 'none';
+          resolve();
+        })
+        .withFailureHandler(function(err) {
+          placeholderEl.querySelector('span').textContent = 'Failed to load';
+          reject(err);
+        })
+        .serverGetThumbnail(id, type);
+      });
+  }
+
+  /** 
+   * @param {callback}  - callback function to render the gallery data
+  */
+  function loadGallery(id, type, renderFn) {
+    return new Promise(function(resolve, reject) {
+      ServerBridge.getGallery(id, type)
+        .then(function(dataUrls) {
+          renderFn(dataUrls);
+          resolve();
+        })
+        .catch(function(err) { reject(err); });
+    });
+  }
+
+  /**
+   * Future function which calls [serverGetDescription] from server side to get the markdown description file.
+   * The result is cached in sessionStorage to reduce api calls.
+   * Returns a promise that either includes the data from cloud or cache, or indicates a failure.
+  */
+  function loadDescription(id, type, displayEl) {
+    const cacheKey = 'markdown::' + id;
+    const cached   = sessionStorage.getItem(cacheKey);
+
+    return new Promise(function(resolve, reject) {
+      if (cached) {
+        displayEl.innerHTML = mdToHtml(cached);
+        resolve();
+        return;
+      }
+      google.script.run
+        .withSuccessHandler(function(mdText) {
+          sessionStorage.setItem(cacheKey, mdText);
+          displayEl.innerHTML = mdToHtml(mdText);
+          resolve();
+        })
+        .withFailureHandler(function(err) {
+          displayEl.textContent = 'Failed to load description.';
+          reject(err);
+        })
+        .serverGetDescription(id, type);
+    });
+  }
+
+  /**
+   * Future function which calls [serverGetGeography] from server side to get the GeoJSON file.
+   * The result is cached in sessionStorage to reduce api calls.
+   * Returns a promise that either includes the data from cloud or cache, or indicates a failure.
+  */
+  function _fetchCoordinates(id, type) {
+    const cacheKeyLatitude  = 'geojson::' + id + 'latitude';
+    const cacheKeyLongitude = 'geojson::' + id + 'longitude';
+    const cachedLatitude    = sessionStorage.getItem(cacheKeyLatitude);
+    const cachedLongitude   = sessionStorage.getItem(cacheKeyLongitude);
+
+    return new Promise(function(resolve, reject) {
+      // Check cache first
+      if (cachedLatitude && cachedLongitude) {
+        resolve([cachedLatitude, cachedLongitude]);
+        return;
+      }
+
+      // otherwise make server call and get from storage
+      google.script.run
+      .withSuccessHandler(function(coordinates) {
+        sessionStorage.setItem(cacheKeyLatitude, coordinates[1]);
+        sessionStorage.setItem(cacheKeyLongitude, coordinates[0]);
+        resolve([coordinates[1], coordinates[0]]);
+      })
+      .withFailureHandler(reject(err))
+      .serverGetGeography(id, type);
+    });
+  }
+
+  /** 
+   * 
+  */
+  function loadCoordinatesAsInput(id, type, latEl, lonEl) {
+    return _fetchCoordinates(id, type)
+      .then(([lat, lon]) => { latEl.value = lat; lonEl.value = lon; })
+      .catch(() => { latEl.value = 'error'; lonEl.value = 'error'; });
+  }
+
+  function loadCoordinatesAsText(id, type, latEl, lonEl) {
+    return _fetchCoordinates(id, type)
+      .then(([lat, lon]) => { latEl.textContent = lat; lonEl.textContent = lon; })
+      .catch(() => { latEl.textContent = 'error'; lonEl.textContent = 'error'; });
+  }
+
+  /**
+   * Updates cached coordinates with a new value
+   * @param {string} lat  - latitude string to store
+   * @param {string} lon  - longitude string to store
+  */
+  function updateCoordinates(id, lat, lon) {
+    const cacheKeyLatitude  = 'geojson::' + id + 'latitude';
+    const cacheKeyLongitude = 'geojson::' + id + 'longitude';
+
+    sessionStorage.setItem(cacheKeyLatitude, lat);
+    sessionStorage.setItem(cacheKeyLongitude, lon);
+  }
+
+  return { compressImage, mdToHtml, loadThumbnail, loadGallery, loadDescription, loadCoordinatesAsInput, loadCoordinatesAsText, updateCoordinates };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Upload - upload / edit modal
 ──────────────────────────────────────────────────────────────────── */
 App.Upload = (() => {
   let _mode      = 'upload';   // 'upload' | 'edit'
@@ -1376,146 +1753,6 @@ App.Upload = (() => {
     onTypeChange();
   }
 
-  /*
-   * compresses an image given a base64 encoded data url, 
-   *   max pixel size to proportionally the source image to,
-   *   and the quality of the resulting compressed image.
-   * Returns a compressed image as a data url.
-  */
-  function _compressImage(dataUrl, maxPx, quality) {
-    return new Promise(function(resolve) {
-      const img = new Image();
-      img.onload = function() {
-        // Scale down proportionally to fit within maxPx
-        const scale  = Math.min(maxPx / img.width, maxPx / img.height, 1);
-        const width  = Math.round(img.width  * scale);
-        const height = Math.round(img.height * scale);
-
-        const canvas    = document.createElement('canvas');
-        canvas.width    = width;
-        canvas.height   = height;
-        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-
-        resolve(canvas.toDataURL('image/jpeg', quality)); // 0.0–1.0
-      };
-      img.src = dataUrl;
-    });
-  }
-
-  /* 
-    Future function which calls [serverGetThumbnail] from server side to get the thumbnail data from storage.
-    The result is cached in sessionStorage to reduce api calls.
-    Returns a promise that either includes the data from cloud or cache, or indicates a failure.
-  */
-  function _loadThumbnail(entityId, type) {
-    const img         = document.getElementById('thumb-preview-img');
-    const placeholder = document.getElementById('thumb-placeholder');
-    const previewArea = document.getElementById('thumb-preview-area');
-    const cacheKey    = 'thumbnail::' + entityId;
-    const cached      = sessionStorage.getItem(cacheKey);
-
-    return new Promise(function(resolve, reject) {
-      // Check cache first
-      if (cached) {
-        img.src = cached;
-        img.style.display = 'block';
-        placeholder.style.display = 'none';
-        resolve();
-        return; 
-      }
-
-      // otherwise make server call and get from storage
-      google.script.run
-        .withSuccessHandler(async function(dataUrl) {
-          const compressed = await _compressImage(dataUrl, 200, 0.75);
-          sessionStorage.setItem(cacheKey, compressed);  // store compressed image in cache
-          img.src = compressed;
-          img.style.display = 'block';
-          placeholder.style.display = 'none';
-          resolve();
-        })
-        .withFailureHandler(function(err) {
-          placeholder.querySelector('span').textContent = 'Failed to load';
-          reject(err);
-        })
-        .serverGetThumbnail(entityId, type);
-      });
-  }
-
-  /* 
-    Future function which calls [serverGetDescription] from server side to get the markdown description file.
-    The result is cached in sessionStorage to reduce api calls.
-    Returns a promise that either includes the data from cloud or cache, or indicates a failure.
-  */
-  function _loadMarkdown(entityId, type) {
-    const editor   = document.getElementById('md-editor');
-    const preview  = document.getElementById('md-preview');
-    const cacheKey = 'markdown::' + entityId;
-    const cached   = sessionStorage.getItem(cacheKey);
-
-    return new Promise(function(resolve, reject) {
-      // Check cache first
-      if (cached) {
-        editor.value = cached;
-        resolve();
-        return;
-      }
-
-      // otherwise make server call and get from storage
-      google.script.run
-      .withSuccessHandler(function(mdText) {
-        sessionStorage.setItem(cacheKey, mdText);
-        editor.value = mdText;
-        resolve();
-      })
-      .withFailureHandler(function(err) {
-        editor.value = 'Failed to load description';
-        reject(err);
-      })
-      .serverGetDescription(entityId, type);
-    });
-  }
-
-  /* 
-    Future function which calls [serverGetGeography] from server side to get the GeoJSON file.
-    The result is cached in sessionStorage to reduce api calls.
-    Returns a promise that either includes the data from cloud or cache, or indicates a failure.
-  */
-  function _loadGeography(entityId, type) {
-    const latitude   = document.getElementById('upload-latitude');
-    const longitude  = document.getElementById('upload-longitude');
-    const cacheKeyLatitude  = 'geojson::' + entityId + 'latitude';
-    const cacheKeyLongitude = 'geojson::' + entityId + 'longitude';
-    const cachedLatitude    = sessionStorage.getItem(cacheKeyLatitude);
-    const cachedLongitude   = sessionStorage.getItem(cacheKeyLongitude);
-
-    return new Promise(function(resolve, reject) {
-      // Check cache first
-      if (cachedLatitude && cachedLongitude) {
-        latitude.value  = cachedLatitude;
-        longitude.value = cachedLongitude;
-        resolve();
-        return;
-      }
-
-      // otherwise make server call and get from storage
-      google.script.run
-      .withSuccessHandler(function(coordinates) {
-        sessionStorage.setItem(cacheKeyLatitude, coordinates[1]);
-        sessionStorage.setItem(cacheKeyLongitude, coordinates[0]);
-        latitude.value  = coordinates[1];
-        longitude.value = coordinates[0];
-        resolve();
-      })
-      .withFailureHandler(function(err) {
-        latitude.value  = 'error loading';
-        longitude.value = 'error loading';
-        reject(err);
-      })
-      .serverGetGeography(entityId, type);
-    });
-  }
-
   /**
    * Upload modal for adding new entities
   */
@@ -1551,9 +1788,10 @@ App.Upload = (() => {
 
     // all cloud api calls are made as promises
     Promise.all([
-      _loadThumbnail(id, type),
-      _loadMarkdown(id, type),
-      _loadGeography(id, type)
+      App.Utilities.loadThumbnail(id, type, document.getElementById('thumb-preview-img'), document.getElementById('thumb-placeholder')),
+      App.Utilities.loadDescription(id, type, document.getElementById('md-editor')),
+      App.Utilities.loadCoordinatesAsInput(id, type, document.getElementById('upload-latitude'), document.getElementById('upload-longitude')),
+      App.Utilities.loadGallery(id, type, _renderGallery),
     ])
       .finally(function() {
         // hide the loader animation and show the edit modal content 
@@ -1653,7 +1891,10 @@ App.Upload = (() => {
   }
 
 
-  function _renderGallery() {
+  function _renderGallery(dataUrls) {
+    // optionally use dataUrls to populate _galleryImages when fetching images
+    if (dataUrls) _galleryImages = dataUrls;
+
     const carousel = document.getElementById('gallery-carousel');
     const count    = document.getElementById('gallery-count');
     count.textContent = `${_galleryImages.length} image${_galleryImages.length !== 1 ? 's' : ''}`;
@@ -1724,7 +1965,7 @@ App.Upload = (() => {
     if (tab === 'preview') {
       editor.style.display  = 'none';
       preview.style.display = 'block';
-      preview.innerHTML     = _mdToHtml(editor.value);
+      preview.innerHTML     = App.Utilities.mdToHtml(editor.value);
       tabEdit.classList.remove('active');
       tabPrev.classList.add('active');
     } else {
@@ -1735,25 +1976,11 @@ App.Upload = (() => {
     }
   }
 
-  function _mdToHtml(md) {
-    // Simple markdown converter (no deps)
-    return md
-      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
-      .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
-      .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
-      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.+?)\*/g,    '<em>$1</em>')
-      .replace(/`(.+?)`/g,      '<code>$1</code>')
-      .replace(/\n\n/g,         '</p><p>')
-      .replace(/^(?!<[h1-6]|<\/p>)(.+)$/gm, '<p>$1</p>')
-      || '<p class="muted">Nothing to preview yet.</p>';
-  }
-
   async function submit() {
-    const id   = document.getElementById('upload-id').value.trim();
-    const name = document.getElementById('upload-name').value.trim();
-    const type = document.getElementById('upload-type').value;
-    const latitude = document.getElementById('upload-latitude').value.trim();
+    const id        = document.getElementById('upload-id').value.trim();
+    const name      = document.getElementById('upload-name').value.trim();
+    const type      = document.getElementById('upload-type').value;
+    const latitude  = document.getElementById('upload-latitude').value.trim();
     const longitude = document.getElementById('upload-longitude').value.trim();
 
     var result = {};
@@ -1761,80 +1988,90 @@ App.Upload = (() => {
     if (!id)   { Toast.error('Entity ID is required.');   return; }
     if (!name) { Toast.error('Entity Name is required.'); return; }
 
-    // Show loading
-    document.getElementById('upload-spinner').classList.add('visible');
-    document.getElementById('upload-submit-btn').disabled = true;
-    document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? 'Saving...' : 'Uploading...';
-
+    // ── Upload mode ──
     if (_mode === 'upload') {
-      // block an upload with duplicate id, preventing overwrite
-      if (App.Table.includesEntity(id)) { Toast.error(`Entity ID ${id} is not unique`); return; };
+      if (App.Table.includesEntity(id)) { Toast.error(`Entity ID ${id} is not unique.`); return; }
+
+      document.getElementById('upload-spinner').classList.add('visible');
+      document.getElementById('upload-submit-btn').disabled = true;
+      document.getElementById('upload-submit-label').textContent = 'Uploading...';
 
       if (type === 'tree' || type === 'sign') {
-        // do not need to send geometry, but do need lat long
-        result = await ServerBridge.uploadAsset({
+        result = await ServerBridge.uploadEntity({
           id, type, name, latitude, longitude,
           files: {
-            thumbnail:   _files.thumbnail || null,
+            thumbnail:   _files.thumbnail   || null,
             description: _files.description || null,
-            gallery:     _galleryImages || null,
+            gallery:     _galleryImages     || null,
           },
         });
-      }
-      else {
-        // do not have lat long, but do need to send geometry
+      } else {
         result = await ServerBridge.uploadAssetGeometry({
           id, type, name,
           files: {
-            thumbnail:   _files.thumbnail || null,
+            thumbnail:   _files.thumbnail   || null,
             description: _files.description || null,
-            geometry:    _files.geometry || null,
+            geometry:    _files.geometry    || null,
             gallery:     _galleryImages,
           },
         });
       }
 
       if (result.success) {
-        App.Table.addEntity({ id, type, name, lastModified: new Date().toISOString().split('T')[0] });
+        App.Table.addEntity({ id, type, name, lastModified: new Date().toISOString() });
         Toast.success(`Entity "${name}" uploaded successfully.`);
-        // Reset button
-        document.getElementById('upload-spinner').classList.remove('visible');
-        document.getElementById('upload-submit-btn').disabled = false;
-        document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
+        _resetBtn();
         close();
       } else {
         Toast.error('Upload failed: ' + (result.error || 'Unknown error'));
+        _resetBtn();
       }
-    } 
-    // Edit mode
-    else {
-      const result = await ServerBridge.editAsset(_editId, _editType, {
+
+    // ── Edit mode ──
+    } else {
+      const idChanged = id !== _editId;
+
+      // If ID changed, validate uniqueness then ask for confirmation
+      if (idChanged) {
+        if (App.Table.includesEntity(id)) { Toast.error(`Entity ID ${id} is already in use.`); return; }
+        const confirmed = await App.IdChange.prompt(_editId, id);
+        if (!confirmed) return;
+      }
+
+      document.getElementById('upload-spinner').classList.add('visible');
+      document.getElementById('upload-submit-btn').disabled = true;
+      document.getElementById('upload-submit-label').textContent = 'Saving...';
+
+      result = await ServerBridge.editEntity(_editId, _editType, {
+        newId:       idChanged ? id : undefined,
         name,
+        latitude,
+        longitude,
         thumbnail:   _files.thumbnail,
         description: _files.description,
         geometry:    _files.geometry,
         gallery:     _galleryImages.length > 0 ? _galleryImages : undefined,
       });
+
       if (result.success) {
-        App.Table.updateEntity({ id: _editId, name });
-        Toast.success(`Entity "${name}" updated successfully.`);
-        // Reset button
-        document.getElementById('upload-spinner').classList.remove('visible');
-        document.getElementById('upload-submit-btn').disabled = false;
-        document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
+        App.Table.updateEntity({ id: idChanged ? id : _editId, oldId: _editId, name, lastModified: new Date().toISOString() });
+        Toast.success(`Entity "${name}" saved successfully.`);
+        _resetBtn();
         close();
       } else {
-        Toast.error('Save failed.');
+        Toast.error('Save failed: ' + (result.error || 'Unknown error'));
+        _resetBtn();
       }
     }
+  }
 
-    // Reset button
+  function _resetBtn() {
     document.getElementById('upload-spinner').classList.remove('visible');
     document.getElementById('upload-submit-btn').disabled = false;
     document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
   }
 
-  return { open, openEdit, close, onTypeChange, onFileSelect, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit };
+  return { open, openEdit, close, onTypeChange, onFileSelect, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit, _resetBtn };
 })();
 
 /* ────────────────────────────────────────────────────────────────────
@@ -1862,7 +2099,7 @@ App.Delete = (() => {
     document.getElementById('delete-confirm-btn').disabled = true;
     document.getElementById('delete-confirm-label').textContent = 'Deleting...';
 
-    const result = await ServerBridge.deleteAsset(_id, _type, _name);
+    const result = await ServerBridge.deleteEntity(_id, _type, _name);
 
     document.getElementById('delete-spinner').classList.remove('visible');
     document.getElementById('delete-confirm-btn').disabled = false;
@@ -1880,6 +2117,102 @@ App.Delete = (() => {
   return { open, close, confirm };
 })();
 
+/* ────────────────────────────────────────────────────────────────────
+   App.View — read-only entity view modal
+──────────────────────────────────────────────────────────────────── */
+App.View = (() => {
+
+  function open(id, type, name, lastModified) {
+    // Populate static props immediately
+    document.getElementById('view-modal-title').textContent  = `View Entity — ${id}`;
+    document.getElementById('view-prop-id').textContent      = id;
+    document.getElementById('view-prop-type').innerHTML      = `<span class="badge badge-${type}">${type}</span>`;
+    document.getElementById('view-prop-name').textContent    = name;
+    document.getElementById('view-prop-date').textContent    = lastModified ? new Date(lastModified).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) : '—';
+    document.getElementById('view-prop-lat').textContent     = '—';
+    document.getElementById('view-prop-lon').textContent     = '—';
+    document.getElementById('view-description-content').textContent = 'Loading description...';
+
+    // Reset thumbnail
+    document.getElementById('view-thumb-img').style.display      = 'none';
+    document.getElementById('view-thumb-placeholder').style.display = 'flex';
+    document.getElementById('view-thumb-placeholder').textContent  = 'Loading...';
+
+    // Reset gallery
+    document.getElementById('view-gallery').innerHTML =
+      '<div class="view-gallery-empty"><span>Loading gallery...</span></div>';
+
+    document.getElementById('view-overlay').classList.remove('hidden');
+
+    // Load data from server
+    Promise.allSettled([
+      App.Utilities.loadThumbnail(id, type, document.getElementById('view-thumb-img'), document.getElementById('view-thumb-placeholder')),
+      App.Utilities.loadDescription(id, type, document.getElementById('view-description-content')),
+      App.Utilities.loadCoordinatesAsText(id, type, document.getElementById('view-prop-lat'), document.getElementById('view-prop-lon')),
+      App.Utilities.loadGallery(id, type, _renderGallery),
+    ]);
+  }
+
+  function close() {
+    document.getElementById('view-overlay').classList.add('hidden');
+  }
+
+  function _renderGallery(imageUrls) {
+    const gallery = document.getElementById('view-gallery');
+    if (!imageUrls || imageUrls.length === 0) {
+      gallery.innerHTML = '<div class="view-gallery-empty"><span>No gallery images.</span></div>';
+      return;
+    }
+    gallery.innerHTML = imageUrls.map((url, i) => `
+      <div class="view-gallery-thumb">
+        <img src="${url}">
+      </div>`
+    ).join('');
+  }
+
+  return { open, close };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.IdChange — confirmation popup for editing an entity's ID
+──────────────────────────────────────────────────────────────────── */
+App.IdChange = (() => {
+  let _resolve = null;
+
+  function prompt(oldId, newId) {
+    document.getElementById('id-change-desc').innerHTML =
+      `You are changing the entity ID from <code class="mono" style="font-size:11px">${oldId}</code>
+       to <code class="mono" style="font-size:11px">${newId}</code>.
+       <br><br>All associated files in Google Cloud Storage will be moved to the new path.
+       <br><br><span style="color:var(--warn)">⚠ This action cannot be undone.</span>`;
+    document.getElementById('id-change-overlay').classList.remove('hidden');
+    return new Promise((resolve) => { _resolve = resolve; });
+  }
+
+  function confirm() {
+    document.getElementById('id-change-spinner').classList.add('visible');
+    document.getElementById('id-change-confirm-btn').disabled = true;
+    document.getElementById('id-change-confirm-label').textContent = 'Confirming...';
+    _resolve(true);
+    _cleanup();
+  }
+
+  function cancel() {
+    _resolve(false);
+    _cleanup();
+  }
+
+  function _cleanup() {
+    document.getElementById('id-change-overlay').classList.add('hidden');
+    document.getElementById('id-change-spinner').classList.remove('visible');
+    document.getElementById('id-change-confirm-btn').disabled = false;
+    document.getElementById('id-change-confirm-label').textContent = 'Confirm ID Change';
+    _resolve = null;
+  }
+
+  return { prompt, confirm, cancel };
+})();
+
 /**
  * Global event handlers
  * These manage button clicks, drag-over styling, etc.
@@ -1889,8 +2222,17 @@ App.Delete = (() => {
 document.getElementById('upload-overlay').addEventListener('click', function(e) {
   if (e.target === this) App.Upload.close();
 });
+
+document.getElementById('id-change-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.IdChange.cancel();
+});
+
 document.getElementById('delete-overlay').addEventListener('click', function(e) {
   if (e.target === this) App.Delete.close();
+});
+
+document.getElementById('view-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.View.close();
 });
 
 // Drag-over styling for drop zones

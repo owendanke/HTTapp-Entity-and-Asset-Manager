@@ -68,28 +68,6 @@ class AssetService {
   }
 
   /**
-   * Creates a GeoJSON Blob from latitude and longitude strings
-   * @param {string} latStr - Latitude as string
-   * @param {string} lonStr - Longitude as string
-   * @returns {Blob} GeoJSON blob
-   */
-  static createGeoJSONBlob(id, type, name, latStr, lonStr) {
-    const lat = parseFloat(latStr);
-    const lon = parseFloat(lonStr);
-
-    if (isNaN(lat) || isNaN(lon)) {
-      throw new Error("Invalid latitude or longitude");
-    }
-    // GeoJSON uses [longitude, latitude]
-    // also storing id, type, and name for helping the app
-    const geojson = {"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Point","coordinates":[lon, lat]},"properties":{"id":id,"type": type, "name":name}}]};
-    
-    const blob = Utilities.newBlob(JSON.stringify(geojson), 'application/geo+json');
-    console.log(`[AssetService.gs][createGeoJSONBlob] Created GeoJSON blob with latitude: ${lat}, longitude: ${lon}`);
-    return blob;
-  }
-
-  /**
    * Lists all assets from GCS (both trees and signs).
    * @returns {Array<Object>} List of asset metadata objects.
    */
@@ -122,118 +100,121 @@ class AssetService {
   }
 
   /**
-   * Uploads a new entity to GCS.
-   * Steps:
-   *   1. Validate required files are present for the asset type.
-   *   2. Upload each file to the appropriate GCS path.
-   *   3. Generate and store MD5 hash.
-   *   4. Update master-hash.json and changelog.json.
+   * Replaces an individual asset file for an entity.
+   * Returns the upload response for HashService staging.
    *
-   * @param {Object} assetData - { id, type, name, latitude, longitude, files: { thumbnail, description, gallery[] } }
-   * @returns {{ success: boolean, entityId: string, error: string }}
+   * @param {string} basePath - e.g. 'trees/1-18'
+   * @param {string} filename - e.g. 'thumbnail.jpg'
+   * @param {*}      fileData - data URL string or blob
+   * @param {string} mimeType
    */
-  static uploadAsset(assetData) {
-    const { id, type, name, latitude, longitude, files } = assetData;
-
-    console.log(`[AssetService.gs][uploadAsset] ID: ${id}, Type: ${type}, Name: ${name}`);
-    console.log(`[AssetService.gs][uploadAsset]   Latitude: ${latitude}, Longitude: ${longitude}`);
-
-    // ── Validate type ──
-    if (!CONFIG.ENTITY_TYPES.includes(type)) {
-      console.log('[AssetService.gs][uploadAsset] WARNING: Unknown asset type: "${type}');
-      return { 
-        success: false,
-        entityId: id,
-        error: `Unknown asset type: "${type}". Valid types: ${CONFIG.ENTITY_TYPES.join(', ')}`
-      };
+  static replaceAsset(basePath, filename, fileData, mimeType) {
+    console.log(`[AssetService.gs][replaceAsset] ${basePath}/${filename}`);
+    if (mimeType === 'image/jpeg') {
+      return StorageService.uploadJpeg(`${basePath}/${filename}`, fileData);
     }
-    
-    // build the storage path for all object uploads
-    const basePath = `${type}s/${id}`;
+    return StorageService.uploadFile(`${basePath}/${filename}`, Utilities.newBlob(fileData, mimeType), mimeType);
+  }
 
+  /**
+   * Moves all asset files of an entity from one ID path to another.
+   * Used when an entity's ID is changed.
+   *
+   * @param {string} oldBasePath - e.g. 'trees/1-18'
+   * @param {string} newBasePath - e.g. 'trees/1-19'
+   */
+  static moveAssets(oldBasePath, newBasePath) {
+    console.log(`[AssetService.gs][moveAssets] ${oldBasePath} → ${newBasePath}`);
+    const files = StorageService.listFiles(oldBasePath);
+    files.forEach(objectPath => {
+      const filename = objectPath.replace(oldBasePath + '/', '');
+      const blob = StorageService.downloadFile(objectPath);
+      const mimeType = blob.getContentType();
+      StorageService.uploadFile(`${newBasePath}/${filename}`, blob, mimeType);
+      StorageService.deleteFile(objectPath);
+    });
+  }
 
-    // ── Validate upload data ──
-    const errors = [];
+  /**
+   * Uploads a single text-based asset file (markdown, geojson).
+   * Returns the upload response for HashService staging.
+   */
+  static uploadTextAsset(basePath, filename, content, mimeType) {
+    console.log(`[AssetService.gs][uploadTextAsset] Uploading ${basePath}/${filename}`);
+    return StorageService.uploadFile(`${basePath}/${filename}`, Utilities.newBlob(content, mimeType), mimeType );
+  }
 
-    // check description
-    if (!files.description) {
-      // missing description
-      console.log('[AssetService.gs][uploadAsset] WARNING: Attempted to upload new asset with no description');
-      errors.push('Missing required file: description.md');
+  static uploadGeoJSONAsset(basePath, filename, geoJSONBlob) {
+    console.log(`[AssetService.gs][uploadGeoJSONAsset] Uploading ${basePath}/${filename}`);
+    return StorageService.uploadFile(`${basePath}/${filename}`, geoJSONBlob, 'application/geo+json');
+  }
+
+  /**
+   * Uploads a single JPEG asset file.
+   * Returns the upload response for HashService staging.
+   */
+  static uploadJpegAsset(basePath, filename, dataUrl) {
+    console.log(`[AssetService.gs][uploadJpegAsset] Uploading ${basePath}/${filename}`);
+    return StorageService.uploadJpeg(`${basePath}/${filename}`, base64FromDataUrl(dataUrl));
+  }
+
+  /**
+   * Uploads all gallery images for an entity.
+   * Returns an array of upload responses for HashService staging.
+   */
+  static uploadGalleryAssets(basePath, galleryImages) {
+    console.log(`[AssetService.gs][uploadGalleryAssets] Uploading ${galleryImages.length} gallery image(s) to ${basePath}`);
+    return galleryImages.map((dataUrl, index) => {
+      const paddedIndex = String(index + 1).padStart(3, '0');
+      return AssetService.uploadJpegAsset(basePath, `gallery-${paddedIndex}.jpg`, dataUrl);
+    });
+  }
+
+  /**
+   * Creates a GeoJSON blob for a point entity.
+   * @param {string} latStr - Latitude as string
+   * @param {string} lonStr - Longitude as string
+   * @returns {Blob} GeoJSON blob
+   */
+  static createGeoJSONBlob(id, type, name, latStr, lonStr) {
+    const lat = parseFloat(latStr);
+    const lon = parseFloat(lonStr);
+
+    if (isNaN(lat) || isNaN(lon)) {
+      throw new Error('Invalid latitude or longitude');
+    }
+
+    const geojson = {
+      type: 'FeatureCollection',
+      features: [{
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [lon, lat] },
+        properties: { id, type, name }
+      }]
     };
 
-    // check thumbnail
-    // for now, sign does not need a thumbnail
-    if (!files.thumbnail && type === 'tree') {
-      // missing thumbnail
-      console.log('[AssetService.gs][uploadAsset] WARNING: Attempted to upload new tree asset with no thumbnail image');
-      errors.push('Missing required file: thumbnail.jpg');
+    console.log(`[AssetService.gs][createGeoJSONBlob] lat: ${lat}, lon: ${lon}`);
+    return Utilities.newBlob(JSON.stringify(geojson), 'application/geo+json');
+  }
+
+  /**
+   * Validates required files are present for a given entity type.
+   * Returns an array of error strings — empty if valid.
+   */
+  static validateEntityFiles(type, files) {
+    const errors = [];
+    if (!files.description) {
+      errors.push('Missing required file: description.md');
     }
-
-    // check gallery
-    // sign does not need a gallery
-    if (!files.gallery || (files.gallery === 0 && type === 'tree')) {
-      // missing gallery images
-      console.log('[AssetService.gs][uploadAsset] WARNING: Attempted to upload new tree asset with no gallery images');
-      errors.push('Missing gallery image(s)');
-    }
-
-    // if there have been any errors abort the upload and report
-    if (errors.length > 0) {
-      console.log(`[AssetService.gs][uploadAsset] UPLOAD FAILED with ${errors.length} error(s):`);
-      console.log(`    ${errors.join('    \n')}`);
-      return { success: false, entityId: id, error: errors.join('\n') };
-    }
-    // no errors, continue to upload
-
-    // ── Upload common files ──
-    
-    // begin HashService session
-    HashService.beginSession();
-
-    try {
-      // upload description
-      var descriptionResponse = StorageService.uploadFile(`${basePath}/description.md`, Utilities.newBlob(files.description), 'text/markdown');
-      HashService.stageFile(descriptionResponse);
-
-      var geojsonResponse = StorageService.uploadFile(`${basePath}/geography.geojson`, this.createGeoJSONBlob(id, type, name, latitude, longitude), 'application/geo+json');
-      HashService.stageFile(geojsonResponse);
-      
-      // ── Upload type-specific files ──
-      if (type === 'tree') {
-        // upload thumbnail
-        var thumbnailResponse = StorageService.uploadJpeg(`${basePath}/thumbnail.jpg`, base64FromDataUrl(files.thumbnail));
-        HashService.stageFile(thumbnailResponse);
-        
-        // upload at least one gallery image
-        files.gallery.forEach((galleryBlob, index) => {
-          // upload gallery images with the name 'gallery-' + image number
-          const paddedIndex = String(index + 1).padStart(3, '0');
-          
-          var galleryImageResponse = StorageService.uploadJpeg(`${basePath}/gallery-${paddedIndex}.jpg`, base64FromDataUrl(galleryBlob));
-          HashService.stageFile(galleryImageResponse);
-        });
+    if (type === 'tree') {
+      if (!files.thumbnail) {
+        errors.push('Missing required file: thumbnail.jpg');
       }
-    } catch (e) {
-      // catch any upload issues
-      HashService.abortSession();
-      console.log(`[AssetService.gs][uploadAsset] Error while uploading files: ${e.message}`);
-      console.log(`[AssetService.gs][uploadAsset] Stack: ${e.stack}`);
-      return { success: false, entityId: id, error: e.message };
+      if (!files.gallery || files.gallery.length === 0) {
+        errors.push('Missing gallery image(s)');
+      }
     }
-
-    // ── Post-upload ──
-    try {
-      // ── Update catalog file ──
-      HashService.commitCatalog({ id: id, type: type, name: name });
-    } catch (e) {
-      // catch HashService issues
-      console.log(`[AssetService.gs][uploadAsset] Error while updating catalog file: ${e.message}`);
-      console.log(`[AssetService.gs][uploadAsset] Stack: ${e.stack}`);
-    }
-    
-    console.log(`[AssetService.gs][uploadAsset] UPLOAD SUCCESS — Asset ${id} stored at gs://${CONFIG.BUCKET_NAME}/${basePath}/`);
-    return { success: true, entityId: id, error: null };
+    return errors;
   }
 
   /**
@@ -313,29 +294,29 @@ class AssetService {
 
   /**
    * Deletes an asset and all its files from GCS.
-   * @param {string} assetId   - The unique asset ID.
-   * @param {string} assetType - 'tree' | 'sign'
-   * @param {string} assetName - Human-readable name (for changelog).
+   * @param {string} entityId   - The unique asset ID.
+   * @param {string} entityType - 'tree' | 'sign'
+   * @param {string} assetName  - Human-readable name (for changelog).
    * @returns {{ success: boolean }}
    */
-  static deleteAsset(assetId, assetType, assetName) {
+  static deleteAsset(entityId, entityType, assetName) {
     console.log(`[AssetService.gs] DELETE ASSET`);
-    console.log(`[AssetService.gs]   → ID   : ${assetId}`);
-    console.log(`[AssetService.gs]   → Type : ${assetType}`);
+    console.log(`[AssetService.gs]   → ID   : ${entityId}`);
+    console.log(`[AssetService.gs]   → Type : ${entityType}`);
     console.log(`[AssetService.gs]   → Name : ${assetName}`);
 
-    const folderPath = `${assetType}s/${assetId}/`;
+    const folderPath = `${entityType}s/${entityId}/`;
     StorageService.deleteFolder(folderPath);
 
-    HashService.updateMasterHash(assetId, assetType, 'delete');
-    HashService.appendChangelog(assetId, assetType, assetName, 'delete');
+    HashService.updateMasterHash(entityId, entityType, 'delete');
+    HashService.appendChangelog(entityId, entityType, assetName, 'delete');
 
     console.log(`[AssetService.gs] DELETE SUCCESS — Removed all files under gs://${CONFIG.BUCKET_NAME}/${folderPath}`);
     return { success: true };
   }
 
   /**
-   * Edits an existing asset (replaces individual files).
+   * Edits assets of an existing entity (replaces individual files).
    * Only files provided in the update payload are replaced.
    *
    * @param {string} assetId   - The unique asset ID.
@@ -390,6 +371,54 @@ class AssetService {
     return `data:${mimeType};base64,${base64}`;
   }
 
+  /** 
+   * Makes two GCS requests to get every existing gallery image from an entity.
+   * First is a list to learn what images exist and the second retrieves the data.
+   * 
+   * @param {string} entityId - Unique ID for the entity
+   * @param {string} type     - A valid entity type ('tree' | 'sign')
+   * @returns                 - List of image/jpeg dataURLs
+   */
+  static getGalleryData(entityId, type) {
+    console.log(`[AssetService.gs][getGalleryData] ${entityId}, ${type}`);
+
+    // first request
+    const prefix = `${type}s/${entityId}`;
+    const response = StorageService.listObjects(prefix);
+    const galleryNames = response.items
+      .filter(item => item.name && item.name.includes('/gallery-'))   // filter items to item names
+      .sort((a, b) => a.name.localeCompare(b.name))                   // sort to show order
+      .map(item => item.name);                                        // replace every item entry with its name
+
+    console.log(`[AssetService.gs][getGalleryData] Found ${galleryNames.length} gallery image(s)`);
+
+    // second request
+    const galleryDataURLs = [];
+    for (const name of galleryNames) {
+      try {
+        var blob = StorageService.downloadFile(name);
+
+        if (!blob) {
+          console.log(`[AssetService.gs][getGalleryData] WARNING: null blob for ${name}`);
+          continue;
+        }
+        
+        var base64 = Utilities.base64Encode(blob.getBytes());
+        var mimeType = blob.getContentType() || 'image/jpeg';
+
+        galleryDataURLs.push(`data:${mimeType};base64,${base64}`);
+      } catch (error) {
+        console.log(`[AssetService.gs][getGalleryData] Encountered error while downloading ${name}`);
+        console.log(`[AssetService.gs][getGalleryData] ${error.message}`);
+
+        continue;
+      }
+    }
+
+    console.log(`[AssetService.gs][getGalleryData] Returning ${galleryDataURLs.length} image(s)`);
+    return galleryDataURLs;
+  }
+
   /**
    * Makes a GCS JSON get request to the server and returns the entity's markdown description
    * 
@@ -434,20 +463,12 @@ function serverListAssets() {
   return AssetService.listAllAssets();
 }
 
-function serverUploadAsset(assetData) {
-  return AssetService.uploadAsset(assetData);
-}
-
-function serverDeleteAsset(assetId, assetType, assetName) {
-  return AssetService.deleteAsset(assetId, assetType, assetName);
-}
-
-function serverEditAsset(entiyId, type, updates) {
-  return AssetService.editAsset(entiyId, type, updates);
-}
-
 function serverGetThumbnail(entiyId, type) {
   return AssetService.getThumbnailData(entiyId, type);
+}
+
+function serverGetGallery(entityId, type) {
+  return AssetService.getGalleryData(entityId, type);
 }
 
 function serverGetDescription(entiyId, type) {
