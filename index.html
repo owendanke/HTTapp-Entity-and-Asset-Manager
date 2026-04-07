@@ -1626,28 +1626,35 @@ App.Utilities = (() => {
    * The result is cached in sessionStorage to reduce api calls.
    * Returns a promise that either includes the data from cloud or cache, or indicates a failure.
   */
-  function loadDescription(id, type, displayEl) {
+  function _fetchDescription(id, type, displayEl) {
     const cacheKey = 'markdown::' + id;
     const cached   = sessionStorage.getItem(cacheKey);
 
     return new Promise(function(resolve, reject) {
       if (cached) {
-        displayEl.innerHTML = mdToHtml(cached);
-        resolve();
+        resolve(cached);
         return;
       }
       google.script.run
         .withSuccessHandler(function(mdText) {
           sessionStorage.setItem(cacheKey, mdText);
-          displayEl.innerHTML = mdToHtml(mdText);
-          resolve();
+          resolve(mdText);
         })
-        .withFailureHandler(function(err) {
-          displayEl.textContent = 'Failed to load description.';
-          reject(err);
-        })
+        .withFailureHandler(reject(err))
         .serverGetDescription(id, type);
     });
+  }
+
+  function loadDescriptionAsInput(id, type, displayEl) {
+    return _fetchDescription(id, type)
+      .then((mdText) => displayEl.value = mdText)
+      .catch(() => displayEl.value = '');
+  }
+
+  function loadDescriptionAsText(id, type, displayEl) {
+    return _fetchDescription(id, type)
+      .then((mdText) => displayEl.innerHTML = mdToHtml(mdText))
+      .catch((mdText) => displayEl.textContent = 'Failed to load description.');
   }
 
   /**
@@ -1708,7 +1715,7 @@ App.Utilities = (() => {
     sessionStorage.setItem(cacheKeyLongitude, lon);
   }
 
-  return { compressImage, mdToHtml, loadThumbnail, loadGallery, loadDescription, loadCoordinatesAsInput, loadCoordinatesAsText, updateCoordinates };
+  return { compressImage, mdToHtml, loadThumbnail, loadGallery, loadDescriptionAsInput, loadDescriptionAsText, loadCoordinatesAsInput, loadCoordinatesAsText, updateCoordinates };
 })();
 
 /* ────────────────────────────────────────────────────────────────────
@@ -1789,7 +1796,7 @@ App.Upload = (() => {
     // all cloud api calls are made as promises
     Promise.all([
       App.Utilities.loadThumbnail(id, type, document.getElementById('thumb-preview-img'), document.getElementById('thumb-placeholder')),
-      App.Utilities.loadDescription(id, type, document.getElementById('md-editor')),
+      App.Utilities.loadDescriptionAsInput(id, type, document.getElementById('md-editor')),
       App.Utilities.loadCoordinatesAsInput(id, type, document.getElementById('upload-latitude'), document.getElementById('upload-longitude')),
       App.Utilities.loadGallery(id, type, _renderGallery),
     ])
@@ -2140,14 +2147,14 @@ App.View = (() => {
 
     // Reset gallery
     document.getElementById('view-gallery').innerHTML =
-      '<div class="view-gallery-empty"><span>Loading gallery...</span></div>';
+      '<div class="view-gallery-empty"><span>Loading gallery... (this will take some time)</span></div>';
 
     document.getElementById('view-overlay').classList.remove('hidden');
 
     // Load data from server
     Promise.allSettled([
       App.Utilities.loadThumbnail(id, type, document.getElementById('view-thumb-img'), document.getElementById('view-thumb-placeholder')),
-      App.Utilities.loadDescription(id, type, document.getElementById('view-description-content')),
+      App.Utilities.loadDescriptionAsText(id, type, document.getElementById('view-description-content')),
       App.Utilities.loadCoordinatesAsText(id, type, document.getElementById('view-prop-lat'), document.getElementById('view-prop-lon')),
       App.Utilities.loadGallery(id, type, _renderGallery),
     ]);
