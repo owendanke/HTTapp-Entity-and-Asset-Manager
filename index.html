@@ -133,7 +133,7 @@
             <!-- Gallery carousel (hidden for sign) -->
             <div class="gallery-section" id="gallery-section">
               <div class="gallery-header">
-                <span class="gallery-label">Image Gallery Carousel</span>
+                <span class="gallery-label">Image Gallery</span>
                 <span class="gallery-count" id="gallery-count">0 images</span>
               </div>
               <div class="gallery-carousel" id="gallery-carousel">
@@ -162,7 +162,7 @@
                   <input type="text" class="input" id="upload-id" placeholder="e.g. 1-18">
                 </div>
                 <div>
-                  <label>Entity Name</label>
+                  <label>Entity Name <span style="color:var(--text-muted);text-transform:none;font-weight:400">(Displayed in app)</span></label>
                   <input type="text" class="input" id="upload-name" placeholder="e.g. shingle oak">
                 </div>
 
@@ -171,18 +171,18 @@
                   <label>GeoJSON Geometry</label>
                   <div class="drop-zone" id="geojson-dropzone">
                     <span id="geojson-filename">Drop geometry.geojson or click to browse</span>
-                    <input type="file" accept=".geojson,application/json" onchange="App.Upload.onFileSelect('geometry', this)">
+                    <input type="file" accept="application/geo+json" data-key="geometry">
                   </div>
                 </div>
 
                 <!-- Coordinate entry fields (shown for tree and sign) -->
                 <div class="coordinates-section" id="coordinates-section">
                   <div>
-                    <label>Latitude</label>
+                    <label>Latitude <span style="color:var(--text-muted);text-transform:none;font-weight:400">(Decimal Degrees)</span></label>
                     <input type="text" class="input" id="upload-latitude" placeholder="e.g. -0.076658">
                   </div>
                   <div>
-                    <label>Longitude</label>
+                    <label>Longitude <span style="color:var(--text-muted);text-transform:none;font-weight:400">(Decimal Degrees)</span></label>
                     <input type="text" class="input" id="upload-longitude" placeholder="e.g. 51.507433">
                   </div>
                 </div>
@@ -200,7 +200,7 @@
                   <span>Click to upload</span>
                 </div>
                 <img id="thumb-preview-img" style="display:none">
-                <input type="file" accept="image/jpeg" onchange="App.Upload.onFileSelect('thumbnail', this)">
+                <input type="file" accept="image/jpeg" data-key="thumbnail">
               </div>
               <div class="thumb-label">Thumbnail Image</div>
             </div>
@@ -208,8 +208,8 @@
             <!-- File checklist -->
             <div class="checklist-section">
               <div class="checklist-header">
-                <div class="checklist-title">File Checklist</div>
-                <div class="checklist-subtitle">Select an entry to upload file(s)</div>
+                <div class="checklist-title">Asset Checklist</div>
+                <div class="checklist-subtitle">Requirements for selected Entity type</div>
               </div>
               <div class="checklist-body" id="checklist-body">
                 <!-- Populated by JS -->
@@ -230,7 +230,7 @@
           </div>
           <div class="markdown-content">
             <textarea id="md-editor" placeholder="# Asset Description&#10;&#10;Write your description in Markdown..."
-              oninput="App.Upload.onMdEdit()" rows="6"></textarea>
+              oninput="App.Upload.onMdEdit()" rows="12"></textarea>
             <div id="md-preview"></div>
           </div>
         </div><!-- /markdown-section -->

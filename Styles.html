@@ -22,7 +22,7 @@
   --text:        #000000;
   --text-muted:  #242424;
   --text-dim:    #3B3B3B;
-  --mono:        'IBM Plex Mono', monospace;
+  --mono:        'IBM Plex Mono', "Lucida Console", "Courier New", monospace;
   --sans:        'IBM Plex Sans', sans-serif;
   --radius:      6px;
   --radius-lg:   10px;
@@ -618,22 +618,25 @@ td.col-actions { text-align: right; }
   transition: all 0.15s;
 }
 .md-tab.active { background: var(--surface3); color: var(--text); }
+
+/* Preview text */
 .markdown-content {
   padding: 12px 14px; min-height: 100px;
-  font-size: 12px;
+  font-size: 14px;
   color: var(--text-dim);
   line-height: 1.6;
   flex: 1;
 }
+/* Editor text */
 .markdown-content textarea {
   width: 100%; background: transparent; border: none; outline: none;
-  color: var(--text); font-family: var(--mono); font-size: 12px;
+  color: var(--text); font-family: var(--mono); font-size: 14px;
   resize: none; min-height: 100px; line-height: 1.6;
 }
 #md-preview { display: none; }
 #md-preview h1, #md-preview h2, #md-preview h3 { color: var(--text); margin-bottom: 6px; }
 #md-preview p { margin-bottom: 8px; }
-#md-preview strong { color: var(--accent-hi); }
+#md-preview strong { color: var(--text); }
 #md-preview code { font-family: var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 3px; font-size: 11px; }
 
 /* Right column: thumbnail + file checklist */
@@ -690,16 +693,15 @@ td.col-actions { text-align: right; }
 
 .ci-name { font-size: 12px; font-family: var(--mono); color: var(--text-dim); }
 .checklist-item.active .ci-name { color: var(--accent-hi); }
-.checklist-item.done .ci-name { color: var(--success); text-decoration: line-through; opacity: 0.7; }
+.checklist-item.done .ci-name { color: var(--success); }
 
 .ci-status {
-  width: 22px; height: 22px; border-radius: 50%;
-  border: 1.5px solid var(--border-hi);
+  width: 22px; height: 22px;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; font-size: 11px; transition: all 0.15s;
 }
-.checklist-item.active .ci-status { border-color: var(--accent); background: rgba(59,130,246,0.1); color: var(--accent); }
-.checklist-item.done .ci-status { border-color: var(--success); background: rgba(34,197,94,0.12); color: var(--success); }
+.checklist-item.active .ci-status { color: var(--accent); }
+.checklist-item.done .ci-status { color: var(--success); }
 
 .modal-footer {
   display: flex; align-items: center; justify-content: space-between;

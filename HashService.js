@@ -101,6 +101,41 @@ var HashService = (function () {
     },
 
     /**
+     * rebaseSession(oldBasePath, newBasePath)
+     * Re-keys all staged file entries from an old base path to a new one.
+     * Call after moveAssets() when an entity ID has changed, so that staged
+     * file hashes are associated with the new GCS paths before commitCatalog().
+     * Must be called within an active session (after beginSession()).
+     *
+     * @param {string} oldBasePath  The original entity base path e.g. 'trees/1-18'
+     * @param {string} newBasePath  The new entity base path e.g. 'trees/1-19'
+     */
+    rebaseSession: function (oldBasePath, newBasePath) {
+      if (_staged === null) {
+        throw new Error('[HashService][rebaseSession] No active session.');
+      }
+      var rebased = {};
+      Object.keys(_staged).forEach(function (path) {
+        var newPath = path.replace(oldBasePath, newBasePath);
+        rebased[newPath] = _staged[path];
+      });
+      _staged = rebased;
+
+      // Re-key existing catalog file entries so unchanged files
+      // are not lost when the entity path changes
+      var catalog = _loadCatalog();
+      var rebasedFiles = {};
+      Object.keys(catalog.files).forEach(function (path) {
+        var newPath = path.includes(oldBasePath) ? path.replace(oldBasePath, newBasePath) : path;
+        rebasedFiles[newPath] = catalog.files[path];
+      });
+      catalog.files = rebasedFiles;
+  _catalog = catalog;
+
+      console.log('[HashService][rebaseSession] Rebased staged files from ' + oldBasePath + ' to ' + newBasePath);
+    },
+
+    /**
      * Returns the parsed catalog object.
      * Downloads from GCS once per script execution, then serves from cache.
      */
@@ -211,19 +246,45 @@ var HashService = (function () {
     },
 
     /**
+     * removeFile(objectPath)
+     * Removes a single file entry from the catalog and re-uploads it.
+     * Use when an individual asset file is deleted without removing the whole entity.
+     * For bulk removal of all files belonging to an entity, use removeEntity() instead.
+     *
+     * @param {string} objectPath  Full GCS object path e.g. 'trees/1-18/gallery-001.jpg'
+     * @returns {Object}  The StorageService response from uploading catalog.json.
+     */
+    removeFile: function (objectPath) {
+      var catalog = _loadCatalog();
+      if (!catalog.files[objectPath]) {
+        console.log('[HashService][removeFile] Path not found in catalog: ' + objectPath);
+        return;
+      }
+      delete catalog.files[objectPath];
+      catalog.fileCount       = Object.keys(catalog.files).length;
+      catalog.master_md5_hash = _computeMasterHash(catalog.files);
+      catalog.updated         = new Date().toISOString();
+      var uploadResponse      = _uploadCatalog(catalog);
+      _catalog = catalog;
+      console.log('[HashService][removeFile] Removed: ' + objectPath);
+      return uploadResponse;
+    },
+
+    /**
      * removeEntity(entityId)
      * Removes an entity record and all of its associated file hashes
-     * from the catalog, then re-uploads it.
+     * from the catalog, optionally re-uploading it.
      *
      * Useful for delete operations. File objects in GCS are NOT deleted
      * here — that is the responsibility of StorageService.
      *
      * @param {string} entityId  The entity id to remove (e.g. "1-18").
+     * @param {bool} uploadImmediately Boolean paramter to choose if re-uploading the catalog or caching changes.
      * @returns {Object}  The StorageService response from uploading catalog.json.
      */
-    removeEntity: function (entityId) {
+    removeEntity: function (entityId, uploadImmediately) {
       if (!entityId) {
-        throw new Error('[HashService] removeEntity requires an entityId.');
+        throw new Error('[HashService][removeEntity] removeEntity requires an entityId.');
       }
 
       var catalog = _loadCatalog();
@@ -246,8 +307,14 @@ var HashService = (function () {
       catalog.master_md5_hash = _computeMasterHash(catalog.files);
       catalog.updated         = new Date().toISOString();
 
+      if (uploadImmediately === false) {
+        _catalog = catalog;
+        console.log('[HashService][removeEntity] Removed entity from cache (deferred): ' + entityId);
+        return;
+      }
+
       var uploadResponse = _uploadCatalog(catalog);
-      console.log('[HashService] Entity removed: ' + entityId
+      console.log('[HashService][removeEntity] Entity removed: ' + entityId
         + '  fileCount=' + catalog.fileCount);
       return uploadResponse;
     }

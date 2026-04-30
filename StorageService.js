@@ -177,6 +177,41 @@ class StorageService {
   }
 
   /**
+   * Moves a GCS object from one path to another within the same bucket.
+   * Uses the GCS JSON API v1 objects.move endpoint.
+   * @param {string} sourcePath      - Full source object path e.g. 'trees/1-18/thumbnail.jpg'
+   * @param {string} destinationPath - Full destination object path e.g. 'trees/1-19/thumbnail.jpg'
+   */
+  static moveObject(sourceObjectPath, destinationObjectPath) {
+    console.log(`[StorageService.gs][moveObject] ${sourceObjectPath} → ${destinationObjectPath}`);
+
+    const service = AuthService._getCloudService();
+    if (!service.hasAccess()) {
+      console.log('[StorageService.gs][moveObject] No valid OAuth session');
+      throw new Error('No valid OAuth session');
+    }
+    const token = service.getAccessToken();
+
+    const url = `https://storage.googleapis.com/storage/v1/b/${CONFIG.BUCKET_NAME}/o/${encodeURIComponent(sourceObjectPath)}/moveTo/o/${encodeURIComponent(destinationObjectPath)}`;
+
+    console.log(`[StorageService.gs][moveObject] POST ${url}`);
+    const response = UrlFetchApp.fetch(url, {
+      method: 'post',
+      headers: {
+        Authorization: 'Bearer ' + token
+      },
+      muteHttpExceptions: true
+    });
+
+    if (response.getResponseCode() !== 200) {
+      const errorText = response.getContentText();
+      throw new Error(`move failed: ${response.getResponseCode()} ${errorText}`);
+    }
+
+    return response;
+  }
+
+  /**
    * Retrieves metadata for a specified GCS object.
    * @param {string} objectPath - Full GCS object path.
    * @returns {Blob} The file content.

@@ -2,6 +2,16 @@
  <script>
 'use strict';
 
+const ICON_CHECK = 
+  `<svg fill=currentColor width="800px" height="800px" viewBox="0 0 1920 1920" xmlns="http://www.w3.org/2000/svg">
+    <path d="M1827.701 303.065 698.835 1431.801 92.299 825.266 0 917.564 698.835 1616.4 1919.869 395.234z" fill-rule="evenodd"/>
+  </svg>`;
+
+const ICON_CROSS = 
+  `<svg fill=currentColor width="800px" height="800px" viewBox="0 0 1920 1920" xmlns="http://www.w3.org/2000/svg">
+    <path d="M1827.701 0 960.065 867.636 92.3 0 0 92.168l867.636 867.767L0 1827.57 92.299 1920l867.766-867.766L1827.701 1920l92.168-92.43-867.635-867.635 867.635-867.767z" fill-rule="evenodd"/>
+  </svg>`;
+
 /* ════════════════════════════════════════════════════════════════════
    ServerBridge
    ─────────────────────────────────────────────────────────────────
@@ -409,8 +419,13 @@ App.Utilities = (() => {
   /** 
    * @param {callback}  - callback function to render the gallery data
   */
-  function loadGallery(id, type, renderFn) {
-    return ServerBridge.getGallery(id, type).then(renderFn);
+  function loadGallery(id, type, renderFn, onCount) {
+    return ServerBridge.getGallery(id, type)
+    .then(function(dataUrls) {
+      if (onCount) onCount(dataUrls.length);
+      return dataUrls;
+    })
+    .then(renderFn);
   }
 
   /**
@@ -418,7 +433,7 @@ App.Utilities = (() => {
    * The result is cached in sessionStorage to reduce api calls.
    * Returns a promise that either includes the data from cloud or cache, or indicates a failure.
   */
-  function _fetchDescription(id, type, displayEl) {
+  function _fetchDescription(id, type) {
     const cacheKey = 'markdown::' + id;
     const cached   = sessionStorage.getItem(cacheKey);
 
@@ -431,6 +446,7 @@ App.Utilities = (() => {
     return ServerBridge.getDescription(id, type)
       .then(function(mdText) {
         sessionStorage.setItem(cacheKey, mdText);
+        return mdText;
       });
   }
 
@@ -473,6 +489,7 @@ App.Utilities = (() => {
       .then(function(coordinates) {
         sessionStorage.setItem(cacheKeyLatitude, coordinates[1]);
         sessionStorage.setItem(cacheKeyLongitude, coordinates[0]);
+        return coordinates;
       });
   }
 
@@ -518,25 +535,42 @@ App.Upload = (() => {
   let _editId    = null;
   let _editType  = null;
   let _files     = {};          // { thumbnail, description, geometry, gallery: [] }
+  let _dirty = {}; // { thumbnail: true, description: true, ... }, tracks what user modifies
   let _galleryImages = [];
-
-  const CHECKLIST_ITEMS = {
+  let _originalGalleryCount = 0;
+  
+  const CHECKLIST_INPUTS = {
     tree: [
-      { key: 'thumbnail',   label: 'thumbnail.jpg' },
-      { key: 'description', label: 'description.md' },
-      { key: 'geometry',    label: 'geometry.geojson' },
-      { key: 'gallery',     label: 'gallery images' },
+      { key: 'id',        label: 'Entity ID'  },
+      { key: 'name',      label: 'Entity Name' },
+      { key: 'latitude',  label: 'Latitude'   },
+      { key: 'longitude', label: 'Longitude'  },
     ],
     sign: [
-      { key: 'thumbnail',   label: 'thumbnail.jpg' },
-      { key: 'description', label: 'description.md' },
-      { key: 'geometry',    label: 'geometry.geojson' },
+      { key: 'id',        label: 'Entity ID'  },
+      { key: 'name',      label: 'Entity Name' },
+      { key: 'latitude',  label: 'Latitude'   },
+      { key: 'longitude', label: 'Longitude'  },
+    ],
+  };
+
+  const CHECKLIST_FILES = {
+    tree: [
+      { key: 'thumbnail',   label: 'Thumbnail image' },
+      { key: 'description', label: 'Description'     },
+      { key: 'gallery',     label: 'Gallery images'  },
+    ],
+    sign: [
+      { key: 'thumbnail',   label: 'Thumbnail image' },
+      { key: 'description', label: 'Description'     },
     ],
   };
 
   function _reset() {
     _files = { gallery: [] };
+    _dirty = {};
     _galleryImages = [];
+    _originalGalleryCount = 0;
     document.getElementById('upload-id').value    = '';
     document.getElementById('upload-name').value  = '';
     document.getElementById('upload-latitude').value  = '';
@@ -590,7 +624,7 @@ App.Upload = (() => {
       App.Utilities.loadThumbnail(id, type, document.getElementById('thumb-preview-img'), document.getElementById('thumb-placeholder')),
       App.Utilities.loadDescriptionAsInput(id, type, document.getElementById('md-editor')),
       App.Utilities.loadCoordinatesAsInput(id, type, document.getElementById('upload-latitude'), document.getElementById('upload-longitude')),
-      App.Utilities.loadGallery(id, type, _renderGallery),
+      App.Utilities.loadGallery(id, type, _renderGallery, function(count) { _originalGalleryCount = count; }),
     ])
       .finally(function() {
         // hide the loader animation and show the edit modal content 
@@ -639,9 +673,10 @@ App.Upload = (() => {
     _renderChecklist();
   }
 
-  function onFileSelect(key, input) {
+  function _onFileSelect(key, input) {
     const file = input.files[0];
     if (!file) return;
+    _dirty[key] = true;
     _files[key] = file;
 
     if (key === 'thumbnail') {
@@ -669,10 +704,33 @@ App.Upload = (() => {
     _renderChecklist();
   }
 
+  /**
+   * Handle file and input changes within the Upload/Edit modal
+   */
+  function _bindListeners() {
+    // File inputs
+    document.querySelectorAll('#upload-overlay input[type="file"]').forEach((input) => {
+      const key = input.dataset.key;
+      if (!key) return;
+      input.addEventListener('change', function() {
+        _onFileSelect(key, this);
+      });
+    });
+
+    // Text inputs
+    ['id', 'name', 'latitude', 'longitude'].forEach((key) => {
+      document.getElementById('upload-' + key).addEventListener('input', () => {
+        _dirty[key] = true;
+        _renderChecklist();
+      });
+    });
+  }
+
   function addGalleryImages(fileList) {
     for (const f of fileList) {
       const reader = new FileReader();
       reader.onload = (e) => {
+        _dirty.gallery = true;
         _galleryImages.push(e.target.result); // base64 string, not File
         _files.gallery = _galleryImages;
         _renderGallery();
@@ -683,6 +741,7 @@ App.Upload = (() => {
   }
 
   function _removeGalleryImage(index) {
+    _dirty.gallery = true;
     _galleryImages.splice(index, 1);
     _files.gallery = _galleryImages;
     _renderGallery();
@@ -714,37 +773,36 @@ App.Upload = (() => {
 
   function _renderChecklist() {
     const type  = document.getElementById('upload-type').value;
-    const items = CHECKLIST_ITEMS[type] || CHECKLIST_ITEMS.sign;
     const body  = document.getElementById('checklist-body');
+    //const items = CHECKLIST_ITEMS[type] ?? [];
 
-    body.innerHTML = items.map(({ key, label }) => {
-      const isDone = key === 'gallery' ? _galleryImages.length > 0 : !!_files[key];
-      const cls    = isDone ? 'done' : '';
-      const icon   = isDone ? '✓' : '⊘';
+    const inputItems = CHECKLIST_INPUTS[type].map(({ key, label }) => {
+      const done = !!document.getElementById('upload-' + key).value.trim();
+      return { key, label, done };
+    });
+
+    const fileItems = CHECKLIST_FILES[type].map(({ key, label }) => {
+      const done = key === 'gallery' ? _galleryImages.length > 0 : !!_files[key];
+      return { key, label, done };
+    });
+
+    const allItems = [...inputItems, ...fileItems];
+
+    body.innerHTML = allItems.map(({ key, label, done }) => {
+      // const isDone = key === 'gallery' ? _galleryImages.length > 0 : !!_files[key];
+      const isDone    = done ? 'done' : '';
+      const icon   = done ? ICON_CHECK : ICON_CROSS;
       return `
-        <div class="checklist-item ${cls}" data-key="${key}">
+        <div class="checklist-item ${isDone}" data-key="${key}">
           <span class="ci-name">${label}</span>
           <div class="ci-status">${icon}</div>
         </div>`;
     }).join('');
-
-    // Allow clicking a checklist item to trigger its file input
-    body.querySelectorAll('.checklist-item').forEach((item) => {
-      item.addEventListener('click', () => {
-        const key = item.dataset.key;
-        if (key === 'gallery') document.getElementById('gallery-file-input').click();
-        else if (key === 'thumbnail') document.querySelector('#thumb-preview-area input').click();
-        else if (key === 'geometry') document.querySelector('#geojson-dropzone input').click();
-        else if (key === 'description') {
-          document.getElementById('md-tab-edit').click();
-          document.getElementById('md-editor').focus();
-        }
-      });
-    });
   }
 
   function onMdEdit() {
     const mdValue = document.getElementById('md-editor').value;
+    _dirty.description = true;
 
     if (mdValue) {
       _files.description = mdValue; // plain string, no Blob needed
@@ -752,6 +810,7 @@ App.Upload = (() => {
       delete _files.description;
     }
 
+    _dirty.description = true;
     _renderChecklist();
   }
 
@@ -792,7 +851,18 @@ App.Upload = (() => {
 
     // ── Upload mode ──
     if (_mode === 'upload') {
+      // check if id is not unique
       if (App.Table.includesEntity(id)) { Toast.error(`Entity ID ${id} is not unique.`); return; }
+
+      // check for missing files
+      const requiredItems = CHECKLIST_FILES[type] ?? [];
+      for (const { key, label } of requiredItems) {
+        const missing = key === 'gallery' ? _galleryImages.length === 0 : !_files[key];
+        if (missing) {
+          Toast.error(`Missing required file: ${label}`);
+          return;
+        }
+      }
 
       document.getElementById('upload-spinner').classList.add('visible');
       document.getElementById('upload-submit-btn').disabled = true;
@@ -845,14 +915,14 @@ App.Upload = (() => {
       document.getElementById('upload-submit-label').textContent = 'Saving...';
 
       result = await ServerBridge.editEntity(_editId, _editType, {
-        newId:       idChanged ? id : undefined,
-        name,
-        latitude,
-        longitude,
-        thumbnail:   _files.thumbnail,
-        description: _files.description,
-        geometry:    _files.geometry,
-        gallery:     _galleryImages.length > 0 ? _galleryImages : undefined,
+        newId:       _dirty.id          ? id        : undefined,
+        name:        _dirty.name        ? name      : undefined,
+        latitude:    _dirty.latitude    ? latitude  : undefined,
+        longitude:   _dirty.longitude   ? longitude : undefined,
+        thumbnail:   _dirty.thumbnail   ? _files.thumbnail   : undefined,
+        description: _dirty.description ? _files.description : undefined,
+        gallery:     _dirty.gallery     ? _galleryImages     : undefined,
+        originalGalleryCount: _dirty.gallery ? _originalGalleryCount : undefined
       });
 
       if (result.success) {
@@ -873,7 +943,10 @@ App.Upload = (() => {
     document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
   }
 
-  return { open, openEdit, close, onTypeChange, onFileSelect, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit, _resetBtn };
+  // setup event listeners for input and file changes
+  _bindListeners();
+  
+  return { open, openEdit, close, onTypeChange, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit, _resetBtn };
 })();
 
 /* ────────────────────────────────────────────────────────────────────

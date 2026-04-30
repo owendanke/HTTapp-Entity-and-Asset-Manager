@@ -111,7 +111,7 @@ class AssetService {
   static replaceAsset(basePath, filename, fileData, mimeType) {
     console.log(`[AssetService.gs][replaceAsset] ${basePath}/${filename}`);
     if (mimeType === 'image/jpeg') {
-      return StorageService.uploadJpeg(`${basePath}/${filename}`, fileData);
+      return StorageService.uploadJpeg(`${basePath}/${filename}`, base64FromDataUrl(fileData));
     }
     return StorageService.uploadFile(`${basePath}/${filename}`, Utilities.newBlob(fileData, mimeType), mimeType);
   }
@@ -125,13 +125,12 @@ class AssetService {
    */
   static moveAssets(oldBasePath, newBasePath) {
     console.log(`[AssetService.gs][moveAssets] ${oldBasePath} → ${newBasePath}`);
-    const files = StorageService.listFiles(oldBasePath);
-    files.forEach(objectPath => {
-      const filename = objectPath.replace(oldBasePath + '/', '');
-      const blob = StorageService.downloadFile(objectPath);
-      const mimeType = blob.getContentType();
-      StorageService.uploadFile(`${newBasePath}/${filename}`, blob, mimeType);
-      StorageService.deleteFile(objectPath);
+    const listObjectsResponse = StorageService.listObjects(oldBasePath);
+
+    listObjectsResponse.items.forEach(object => {
+      const sourceObjectPath = object.name;
+      const destinationObjectPath = sourceObjectPath.replace(oldBasePath, newBasePath);
+      StorageService.moveObject(sourceObjectPath, destinationObjectPath);
     });
   }
 

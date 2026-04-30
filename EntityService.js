@@ -132,15 +132,28 @@ class EntityService {
           const paddedIndex = String(index + 1).padStart(3, '0');
           HashService.stageFile(AssetService.replaceAsset(basePath, `gallery-${paddedIndex}.jpg`, galleryData, 'image/jpeg'));
         });
+
+        // if gallery images were removed during edit, delete them here.
+        const newCount = updates.gallery.length;
+        const oldCount = updates.originalGalleryCount;
+
+        for (let i = newCount + 1; i <= oldCount; i++) {
+          const paddedIndex = String(i).padStart(3, '0');
+          const stalePath = `${basePath}/gallery-${paddedIndex}.jpg`;
+          StorageService.deleteObject(stalePath);
+          HashService.removeFile(stalePath);
+        }
       }
 
       // ── Move all assets to new path if ID changed ──
       if (newId !== entityId) {
         AssetService.moveAssets(basePath, newBasePath);
+        HashService.rebaseSession(basePath, newBasePath);
+        HashService.removeEntity(entityId, false);
       }
 
       // ── Update catalog ──
-      const entityName = updates.name || entityId;
+      const entityName = updates.name || EntityService.getEntityName;
       HashService.commitCatalog({ id: newId, type: entityType, name: entityName });
 
       console.log(`[EntityService.gs][editEntity] SUCCESS — Entity ${entityId} updated`);
