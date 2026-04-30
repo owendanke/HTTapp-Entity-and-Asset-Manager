@@ -169,13 +169,20 @@ class EntityService {
     try {
       const basePath = `${entityType}s/${entityId}`;
 
-      // ── Delete all asset files under the entity path ──
-      const files = StorageService.listFiles(basePath);
-      console.log(`[EntityService.gs][deleteEntity] Found ${files.length} file(s) to delete under ${basePath}`);
+      // ── Delete all asset objects under the entity path ──
+      const prefix = `${entityType}s/${entityId}`;
+      const response = StorageService.listObjects(prefix);
+      const items = response.items;
+      console.log(`[EntityService.gs][deleteEntity] Found ${items.length} file(s) to delete under ${basePath}`);
 
-      files.forEach(objectPath => {
-        StorageService.deleteFile(objectPath);
-        console.log(`[EntityService.gs][deleteEntity] Deleted: ${objectPath}`);
+      items.forEach(item => {
+        try {
+          StorageService.deleteObject(item.name);
+          console.log(`[EntityService.gs][deleteEntity] Deleted: ${item.name}`);
+        } catch (err) {
+          console.error(`[EntityService.gs][deleteEntity] Failed: ${item.name} -> ${err.message}`);
+          throw err;
+        }
       });
 
       // ── Remove entity from catalog ──

@@ -218,23 +218,38 @@ class StorageService {
    * Deletes a single GCS object.
    * @param {string} objectPath - Full GCS object path.
    */
-  static deleteFile(objectPath) {
-    const url = `https://storage.googleapis.com/storage/v1/b/${CONFIG.BUCKET_NAME}/o/${encodeURIComponent(objectPath)}`;
-    console.log(`[StorageService.gs] DELETE FILE`);
-    console.log(`[StorageService.gs] API CALL (stubbed): DELETE ${url}`);
-    console.log(`[StorageService.gs]   → Would permanently delete gs://${CONFIG.BUCKET_NAME}/${objectPath}`);
-    return { success: true };
-  }
+  static deleteObject(objectPath) {
+    console.log(`[StorageService.gs][deleteObject] Deleting ${objectPath}`);
 
-  /**
-   * Deletes all objects under a given prefix (used when removing an entire asset folder).
-   * @param {string} prefix - e.g. "trees/tree-id-1/"
-   */
-  static deleteFolder(prefix) {
-    console.log(`[StorageService.gs] DELETE FOLDER`);
-    console.log(`[StorageService.gs] API CALL (stubbed): LIST then batch DELETE all objects under gs://${CONFIG.BUCKET_NAME}/${prefix}`);
-    console.log(`[StorageService.gs]   → Would delete every file inside the folder`);
-    return { success: true };
+    // create HTTP request url 
+    const url = `https://storage.googleapis.com/storage/v1/b/${CONFIG.BUCKET_NAME}/o/${encodeURIComponent(objectPath)}`;
+
+    const service = AuthService._getCloudService();
+
+    if (!service.hasAccess()) {
+      console.log('[StorageService.gs][deleteObject] No valid OAuth session');
+      throw new Error('No valid OAuth session');
+    }
+
+    const token = service.getAccessToken();
+
+    // use UrlFetchApp.fetch to send DELETE to GCS 
+    console.log(`[StorageService.gs][deleteObject] DELETE ${url}`);
+
+    var response = UrlFetchApp.fetch(url, {
+      method: 'delete',
+      headers: {
+        Authorization: 'Bearer ' + token
+      },
+      'muteHttpExceptions': true
+    });
+
+    if (response.getResponseCode() !== 204) {
+      const errorText = response.getContentText();
+      throw new Error(`delete failed: ${response.getResponseCode()} ${errorText}`);
+    }
+    
+    return response;
   }
 
   /**

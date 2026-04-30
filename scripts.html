@@ -1,0 +1,1084 @@
+<!-- scripts.html -->
+ <script>
+'use strict';
+
+/* ════════════════════════════════════════════════════════════════════
+   ServerBridge
+   ─────────────────────────────────────────────────────────────────
+   Wraps every google.script.run call in a Promise.
+   Each public method corresponds to a server-side function defined
+   in one of the .gs files.
+
+   In iteration 1 the _stub() path is used so the UI can be tested
+   without a live GCS connection. When real APIs are wired up, simply
+   replace the setTimeout(..._stub...) line with the commented-out
+   google.script.run call in _run().
+══════════════════════════════════════════════════════════════════════ */
+const ServerBridge = (() => {
+  function reject(error) {
+    //Toast.error(`ERROR: ${error.message}`);
+  }
+
+  // Wraps a google.script.run call in a Promise.
+  function _run(fnName, ...args) {
+    // debugging when a server function is wrong
+    if (typeof google.script.run[fnName] !== 'function') {
+      reject(`Server function "${fnName}" not found`);
+    }
+    
+    return new Promise((resolve, reject) => {
+      console.log(`[ServerBridge] -> ${fnName}`);
+
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)[fnName](...args);
+    });
+  }
+
+  return {
+    getAuthUrl:  ()                     => _run('serverGetAuthUrl'),
+    checkSession:()                     => _run('serverCheckSession'),
+    signOut:     ()                     => _run('serverSignOut'),
+    
+    deleteEntity: (id, type, name)      => _run('serverDeleteEntity', id, type, name),
+    editEntity: (id, type, updates)     => _run('serverEditEntity', id, type, updates),
+    uploadEntity: (data)                => _run('serverUploadEntity', data),
+    listAllEntities: ()                 => _run('serverListAllEntities'),
+
+    getCatalog:  ()                     => _run('serverGetCatalog'),
+    getDescription: (id, type)          => _run('serverGetDescription', id, type),
+    getGallery: (id, type)              => _run('serverGetGallery', id, type),
+    getGeography: (id, type)            => _run('serverGetGeography', id, type),
+    getThumbnail: (id, type)            => _run('serverGetThumbnail', id, type),
+  };
+})();
+
+/* ════════════════════════════════════════════════════════════════════
+   Toast notification utility
+══════════════════════════════════════════════════════════════════════ */
+const Toast = {
+  show(message, type = 'info', duration = 3500) {
+    const el = document.createElement('div');
+    el.className = `toast toast-${type}`;
+    el.textContent = message;
+    document.getElementById('toast-container').appendChild(el);
+    setTimeout(() => el.remove(), duration);
+  },
+  success: (msg) => Toast.show(msg, 'success'),
+  error:   (msg) => Toast.show(msg, 'error'),
+  info:    (msg) => Toast.show(msg, 'info'),
+};
+
+/* ════════════════════════════════════════════════════════════════════
+   App namespace — all feature modules
+══════════════════════════════════════════════════════════════════════ */
+window.App = {};
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Auth
+   ─────────────────────────────────────────────────────────────────
+   Manages the Google OAuth2 popup flow.
+
+   loginWithGoogle():
+     1. Calls ServerBridge.getAuthUrl() to get the auth URL
+     2. Opens it in a small popup window
+     3. Listens for the AUTH_SUCCESS postMessage from the popup
+     4. On success, calls ServerBridge.checkSession() to
+        retrieve the user and transition to the home page
+──────────────────────────────────────────────────────────────────── */
+App.Auth = (() => {
+  let _currentUser = null;
+  let _authPopup   = null;
+  let _pollTimer   = null;
+
+  function _showApp(user) {
+    _currentUser = user;
+    document.getElementById('login-overlay').classList.add('hidden');
+    document.getElementById('app').classList.add('visible');
+    document.getElementById('user-name').textContent = user.name || user.email;
+    App.Table.load();
+  }
+
+  function _showLoginError(msg) {
+    const el = document.getElementById('login-error');
+    document.getElementById('login-error-msg').textContent = msg;
+    el.classList.add('visible');
+  }
+
+  function _resetLoginBtn() {
+    const btn   = document.getElementById('google-login-btn');
+    const label = document.getElementById('google-btn-label');
+    btn.disabled  = false;
+    label.textContent = 'Continue with Google';
+  }
+
+  /**
+   * Initiates the Google OAuth2 login flow.
+   *
+   * Step 1: Ask the server for the auth URL (Auth.gs → serverGetAuthUrl).
+   * Step 2: Open it in a popup window.
+   * Step 3: Listen for AUTH_SUCCESS postMessage from the popup page.
+   * Step 4: Poll serverCheckSession() to get the verified user object.
+   */
+  async function loginWithGoogle() {
+    const btn   = document.getElementById('google-login-btn');
+    const label = document.getElementById('google-btn-label');
+    btn.disabled      = true;
+    label.textContent = 'Opening sign-in...';
+    document.getElementById('login-error').classList.remove('visible');
+
+    console.log('[Auth] loginWithGoogle() - requesting auth URL from server');
+
+    let authUrl;
+    try {
+      authUrl = await ServerBridge.getAuthUrl();
+    } catch (err) {
+      console.error('[Auth] Failed to get auth URL:', err);
+      _showLoginError('Could not reach the authentication server. Please try again.');
+      _resetLoginBtn();
+      return;
+    }
+
+    console.log(`[Auth] Auth URL received`);
+
+    // --- open Google OAuth URL in a popup ---
+    const popupWidth  = 520;
+    const popupHeight = 640;
+    const left   = Math.round(window.screenX + (window.outerWidth  - popupWidth)  / 2);
+    const top    = Math.round(window.screenY + (window.outerHeight - popupHeight) / 2);
+    const params = `width=${popupWidth},height=${popupHeight},left=${left},top=${top},` +
+                   `scrollbars=yes,resizable=yes,toolbar=no,menubar=no`;
+
+    _authPopup = window.open(authUrl, 'httapp_google_auth', params);
+
+    if (!_authPopup || _authPopup.closed) {
+      _showLoginError('The sign-in popup was blocked. Please allow popups for this site.');
+      _resetLoginBtn();
+      return;
+    }
+
+    label.textContent = 'Waiting for Google...';
+    console.log('[Auth] Popup opened, waiting for AUTH_SUCCESS postMessage');
+
+    // Listen for the postMessage sent by authCallback()'s success page (Auth.gs)
+    function _onMessage(event) {
+      if (event.data !== 'AUTH_SUCCESS') return;
+      console.log('[Auth] AUTH_SUCCESS received from popup');
+      window.removeEventListener('message', _onMessage);
+      clearInterval(_pollTimer);
+      _handleAuthSuccess();
+    }
+    window.addEventListener('message', _onMessage);
+
+    // Fallback: poll for popup closure in case postMessage is blocked
+    _pollTimer = setInterval(() => {
+      if (_authPopup && _authPopup.closed) {
+        clearInterval(_pollTimer);
+        window.removeEventListener('message', _onMessage);
+        console.log('[Auth] Popup closed — polling serverCheckSession() as fallback');
+        _handleAuthSuccess();
+      }
+    }, 800);
+  }
+
+  /** Called when the popup signals success (or closes). Verifies the session. */
+  async function _handleAuthSuccess() {
+    const label = document.getElementById('google-btn-label');
+    label.textContent = 'Verifying...';
+
+    try {
+      const session = await ServerBridge.checkSession();
+      if (session && session.authenticated) {
+        _showApp(session.user);
+        Toast.success(`Welcome, ${session.user.name}!`);
+      } else {
+        _showLoginError('Authentication was not completed. Please try again.');
+        _resetLoginBtn();
+      }
+    } catch (err) {
+      console.error('[Auth] serverCheckSession() failed:', err);
+      _showLoginError('Session verification failed. Please try again.');
+      _resetLoginBtn();
+    }
+  }
+
+  async function signOut() {
+    await ServerBridge.signOut();
+    _currentUser = null;
+    document.getElementById('app').classList.remove('visible');
+    document.getElementById('login-overlay').classList.remove('hidden');
+    document.getElementById('login-error').classList.remove('visible');
+    _resetLoginBtn();
+    Toast.info('Signed out successfully.');
+  }
+
+  function getUser() { return _currentUser; }
+
+  return { loginWithGoogle, signOut, getUser };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Table — entity list rendering, filtering, options menu
+──────────────────────────────────────────────────────────────────── */
+App.Table = (() => {
+  let _entities    = [];
+
+  function _typebadge(type) {
+    return `<span class="badge badge-${type}">${type}</span>`;
+  }
+
+  function _formatDate(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function _renderRows(entities) {
+    const tbody = document.getElementById('entity-tbody');
+    if (entities.length === 0) {
+      tbody.innerHTML = `
+      <tr><td colspan="5" class="table-empty">
+        <div class="empty-icon">◫</div>
+        <div>No entities found</div>
+      </td></tr>`;
+      return;
+    }
+    tbody.innerHTML = entities.map((a) => `
+      <tr data-id="${a.id}" data-type="${a.type}" data-name="${a.name}">
+        <td class="col-id">${a.id}</td>
+        <td>${_typebadge(a.type)}</td>
+        <td>${a.name}</td>
+        <td class="mono muted" style="font-size:12px">${_formatDate(a.lastModified)}</td>
+        <td class="col-actions">
+          <div class="action-buttons">
+            <button class="btn btn-primary" title="View"
+              onclick="App.View.open('${a.id}','${a.type}','${a.name.replace(/'/g,"\\'")}','${a.lastModified}')">View</button>
+            <button class="btn btn-primary" title="Edit"
+              onclick="App.Upload.openEdit('${a.id}','${a.type}','${a.name.replace(/'/g,"\\'")}')">Edit</button>
+            <button class="btn btn-danger" title="Delete"
+              onclick="App.Delete.open('${a.id}','${a.type}','${a.name.replace(/'/g,"\\'")}')">Delete</button>
+        </div>
+      </td>
+      </tr>
+    `).join('');
+    document.getElementById('entity-count').textContent = `${entities.length} entit${entities.length !== 1 ? 'ies' : 'y'}`;
+  }
+
+  /*
+    Load Entities from server using script
+  */
+  async function load() {
+    const tbody = document.getElementById('entity-tbody');
+    tbody.innerHTML = `<tr><td colspan="5" class="table-empty"><div>Loading entities ...</div></td></tr>`;
+
+    // ask script to read the catalog file to find definitions
+    await ServerBridge.getCatalog();
+    // retrieve and build entities
+    _entities = await ServerBridge.listAllEntities();
+    filter();
+  }
+
+  function filter() {
+    const q    = document.getElementById('search-input').value.toLowerCase();
+    const type = document.getElementById('type-filter').value;
+    const filtered = _entities.filter((a) => {
+      const matchType = type === 'all' || a.type === type;
+      const matchQ    = !q || a.id.toLowerCase().includes(q) || a.name.toLowerCase().includes(q);
+      return matchType && matchQ;
+    });
+    _renderRows(filtered);
+  }
+
+  function addEntity(entity) {
+    _entities.unshift(entity);
+    filter();
+  }
+
+  function removeEntity(id) {
+    _entities = _entities.filter((a) => a.id !== id);
+    filter();
+  }
+
+  function updateEntity(updated) {
+    const idx = _entities.findIndex((a) => a.id === (updated.oldId || updated.id));
+    if (idx >= 0) _entities[idx] = { ..._entities[idx], ...updated, id: updated.id };
+    filter();
+  }
+
+  function includesEntity(id) {
+    return _entities.some(e => e.id === id);
+  }
+
+  return { load, filter, addEntity, removeEntity, updateEntity, includesEntity };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Utilities - Utilities for loading data from GCS
+──────────────────────────────────────────────────────────────────── */
+App.Utilities = (() => {
+
+  /*
+   * compresses an image given a base64 encoded data url, 
+   *   max pixel size to proportionally the source image to,
+   *   and the quality of the resulting compressed image.
+   * Returns a compressed image as a data url.
+  */
+  function compressImage(dataUrl, maxPx, quality) {
+    return new Promise(function(resolve) {
+      const img = new Image();
+      img.onload = function() {
+        // Scale down proportionally to fit within maxPx
+        const scale  = Math.min(maxPx / img.width, maxPx / img.height, 1);
+        const width  = Math.round(img.width  * scale);
+        const height = Math.round(img.height * scale);
+
+        const canvas    = document.createElement('canvas');
+        canvas.width    = width;
+        canvas.height   = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+
+        resolve(canvas.toDataURL('image/jpeg', quality)); // 0.0–1.0
+      };
+      img.src = dataUrl;
+    });
+  }
+
+  function mdToHtml(md) {
+    // Simple markdown converter (no deps)
+    return md
+      .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+      .replace(/^## (.+)$/gm,  '<h2>$1</h2>')
+      .replace(/^# (.+)$/gm,   '<h1>$1</h1>')
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g,    '<em>$1</em>')
+      .replace(/`(.+?)`/g,      '<code>$1</code>')
+      .replace(/\n\n/g,         '</p><p>')
+      .replace(/^(?!<[h1-6]|<\/p>)(.+)$/gm, '<p>$1</p>')
+      || '<p class="muted">Nothing to preview yet.</p>';
+  }
+
+  /**
+   * @param {string} cacheKey - The key to retrieve cache value
+   */
+  function getCache(cacheKey) {
+    return sessionStorage.getItem(cacheKey);
+  }
+
+  /**
+   * 
+   * @param {string} cacheKey - The key to store cache value
+   */
+  function setCache(cacheKey, value) {
+    
+  }
+
+  /** 
+   * Future function which calls [serverGetThumbnail] from server side to get the thumbnail data from storage.
+   * The result is cached in sessionStorage to reduce api calls.
+   * Returns a promise that either includes the data from cloud or cache, or indicates a failure.
+   * @param {HTMLElement} imgEl - HTMLElement for thumbnail image
+   * @param {HTMLElement} placeholderEl - HTMLElement for image placeholder
+  */
+  function loadThumbnail(id, type, imgEl, placeholderEl) {
+    const cacheKey    = 'thumbnail::' + id;
+    const cached      = sessionStorage.getItem(cacheKey);
+
+    // Check cache first
+    if (cached) {
+      imgEl.src = cached;
+      imgEl.style.display = 'block';
+      placeholderEl.style.display = 'none';
+      return Promise.resolve();
+    }
+
+    return ServerBridge.getThumbnail(id, type)
+      .then(function(dataUrl) {
+        return App.Utilities.compressImage(dataUrl, 200, 0.75);
+      })
+      .then(function(compressed) {
+        sessionStorage.setItem(cacheKey, compressed);  // store compressed image in cache
+        imgEl.src = compressed;
+        imgEl.style.display = 'block';
+        placeholderEl.style.display = 'none';
+      })
+      .catch(function(err) {
+        placeholderEl.querySelector('span').textContent = 'Failed to load';
+      });
+  }
+
+  /** 
+   * @param {callback}  - callback function to render the gallery data
+  */
+  function loadGallery(id, type, renderFn) {
+    return ServerBridge.getGallery(id, type).then(renderFn);
+  }
+
+  /**
+   * Future function which calls [serverGetDescription] from server side to get the markdown description file.
+   * The result is cached in sessionStorage to reduce api calls.
+   * Returns a promise that either includes the data from cloud or cache, or indicates a failure.
+  */
+  function _fetchDescription(id, type, displayEl) {
+    const cacheKey = 'markdown::' + id;
+    const cached   = sessionStorage.getItem(cacheKey);
+
+    // Check cache first
+    if (cached) {
+      return Promise.resolve(cached);
+    }
+
+    // otherwise make server call and get from storage
+    return ServerBridge.getDescription(id, type)
+      .then(function(mdText) {
+        sessionStorage.setItem(cacheKey, mdText);
+      });
+  }
+
+  /** 
+   * Loads description and formats for value
+  */
+  function loadDescriptionAsInput(id, type, displayEl) {
+    return _fetchDescription(id, type)
+      .then((mdText) => displayEl.value = mdText)
+      .catch(() => displayEl.value = '');
+  }
+
+  /** 
+   * Loads description and formats for text content
+  */
+  function loadDescriptionAsText(id, type, displayEl) {
+    return _fetchDescription(id, type)
+      .then((mdText) => displayEl.innerHTML = mdToHtml(mdText))
+      .catch((mdText) => displayEl.textContent = 'Failed to load description.');
+  }
+
+  /**
+   * Future function which calls [serverGetGeography] from server side to get the GeoJSON file.
+   * The result is cached in sessionStorage to reduce api calls.
+   * Returns a promise that either includes the data from cloud or cache, or indicates a failure.
+  */
+  function _fetchCoordinates(id, type) {
+    const cacheKeyLatitude  = 'geojson::' + id + 'latitude';
+    const cacheKeyLongitude = 'geojson::' + id + 'longitude';
+    const cachedLatitude    = sessionStorage.getItem(cacheKeyLatitude);
+    const cachedLongitude   = sessionStorage.getItem(cacheKeyLongitude);
+
+    // Check cache first
+    if (cachedLatitude && cachedLongitude) {
+      return Promise.resolve([cachedLatitude, cachedLongitude]);
+    }
+
+    // otherwise make server call and get from storage
+    return ServerBridge.getGeography(id, type)
+      .then(function(coordinates) {
+        sessionStorage.setItem(cacheKeyLatitude, coordinates[1]);
+        sessionStorage.setItem(cacheKeyLongitude, coordinates[0]);
+      });
+  }
+
+  /** 
+   * Loads coordinates and formats for value
+  */
+  function loadCoordinatesAsInput(id, type, latEl, lonEl) {
+    return _fetchCoordinates(id, type)
+      .then(([lat, lon]) => { latEl.value = lat; lonEl.value = lon; })
+      .catch(() => { latEl.value = 'error'; lonEl.value = 'error'; });
+  }
+
+  /** 
+   * Loads coordinates and formats for text content
+  */
+  function loadCoordinatesAsText(id, type, latEl, lonEl) {
+    return _fetchCoordinates(id, type)
+      .then(([lat, lon]) => { latEl.textContent = lat; lonEl.textContent = lon; })
+      .catch(() => { latEl.textContent = 'error'; lonEl.textContent = 'error'; });
+  }
+
+  /**
+   * Updates cached coordinates with a new value
+   * @param {string} lat  - latitude string to store
+   * @param {string} lon  - longitude string to store
+  */
+  function updateCoordinates(id, lat, lon) {
+    const cacheKeyLatitude  = 'geojson::' + id + 'latitude';
+    const cacheKeyLongitude = 'geojson::' + id + 'longitude';
+
+    sessionStorage.setItem(cacheKeyLatitude, lat);
+    sessionStorage.setItem(cacheKeyLongitude, lon);
+  }
+
+  return { compressImage, mdToHtml, loadThumbnail, loadGallery, loadDescriptionAsInput, loadDescriptionAsText, loadCoordinatesAsInput, loadCoordinatesAsText, updateCoordinates };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Upload - upload / edit modal
+──────────────────────────────────────────────────────────────────── */
+App.Upload = (() => {
+  let _mode      = 'upload';   // 'upload' | 'edit'
+  let _editId    = null;
+  let _editType  = null;
+  let _files     = {};          // { thumbnail, description, geometry, gallery: [] }
+  let _galleryImages = [];
+
+  const CHECKLIST_ITEMS = {
+    tree: [
+      { key: 'thumbnail',   label: 'thumbnail.jpg' },
+      { key: 'description', label: 'description.md' },
+      { key: 'geometry',    label: 'geometry.geojson' },
+      { key: 'gallery',     label: 'gallery images' },
+    ],
+    sign: [
+      { key: 'thumbnail',   label: 'thumbnail.jpg' },
+      { key: 'description', label: 'description.md' },
+      { key: 'geometry',    label: 'geometry.geojson' },
+    ],
+  };
+
+  function _reset() {
+    _files = { gallery: [] };
+    _galleryImages = [];
+    document.getElementById('upload-id').value    = '';
+    document.getElementById('upload-name').value  = '';
+    document.getElementById('upload-latitude').value  = '';
+    document.getElementById('upload-longitude').value  = '';
+    document.getElementById('upload-type').value  = 'tree';
+    document.getElementById('md-editor').value    = '';
+    document.getElementById('md-preview').innerHTML = '';
+    document.getElementById('geojson-filename').textContent = 'Drop geometry.geojson or click to browse';
+    document.getElementById('thumb-preview-img').style.display = 'none';
+    document.getElementById('thumb-placeholder').style.display = 'flex';
+    _renderGallery();
+    _renderChecklist();
+    onTypeChange();
+  }
+
+  /**
+   * Upload modal for adding new entities
+  */
+  function open() {
+    _mode = 'upload'; _editId = null; _editType = null;
+    _reset();
+    document.getElementById('upload-modal-title').textContent = 'Upload New Entity';
+    document.getElementById('upload-submit-label').textContent = 'Upload';
+    document.getElementById('upload-overlay').classList.remove('hidden');
+
+    onTypeChange();
+  }
+
+  /**
+   * Upload modal modified for editing entities
+  */
+  function openEdit(id, type, name) {
+    _mode = 'edit'; _editId = id; _editType = type;
+    _reset();
+    const content = document.getElementById('modal-content');
+
+    document.getElementById('upload-modal-title').textContent = `Edit Entity — ${id}`;
+    document.getElementById('upload-submit-label').textContent = 'Save Changes';
+    document.getElementById('upload-id').value   = id;
+    document.getElementById('upload-name').value = name;
+    document.getElementById('upload-type').value = type;
+    document.getElementById('upload-type').disabled = true;
+
+    // Show loader, hide modal content until ready
+    const loader = document.getElementById('modal-loader');
+    loader.style.display = 'block';
+    content.style.display = 'none';
+
+    // all cloud api calls are made as promises
+    Promise.all([
+      App.Utilities.loadThumbnail(id, type, document.getElementById('thumb-preview-img'), document.getElementById('thumb-placeholder')),
+      App.Utilities.loadDescriptionAsInput(id, type, document.getElementById('md-editor')),
+      App.Utilities.loadCoordinatesAsInput(id, type, document.getElementById('upload-latitude'), document.getElementById('upload-longitude')),
+      App.Utilities.loadGallery(id, type, _renderGallery),
+    ])
+      .finally(function() {
+        // hide the loader animation and show the edit modal content 
+        loader.style.display = 'none';
+        content.style.display = 'block';
+      });
+    
+    onTypeChange();
+    document.getElementById('upload-overlay').classList.remove('hidden');
+  }
+
+  function close() {
+    document.getElementById('upload-overlay').classList.add('hidden');
+    document.getElementById('upload-type').disabled = false;
+    _reset();
+  }
+
+  function onTypeChange() {
+    const type = document.getElementById('upload-type').value;
+    const gallerySection = document.getElementById('gallery-section');
+    const thumbSection = document.querySelector('.thumb-section');
+    const geojsonSection = document.getElementById('geojson-section');
+    const coordinateSection = document.getElementById('coordinates-section')
+
+    // gallery and thumbnail: tree only
+    if (type === 'tree') {
+      gallerySection.classList.remove('hidden');
+      thumbSection.classList.remove('hidden');
+    } else {
+      gallerySection.classList.add('hidden');
+      thumbSection.classList.add('hidden');
+      _galleryImages = []; _files.gallery = [];
+      _renderGallery();
+    }
+
+    // coordinates: tree and sign
+    if (type === 'tree' || type === 'sign') {
+      coordinateSection.classList.remove('hidden');
+      geojsonSection.classList.add('hidden');
+    } else {
+      // unknown future type: show geojson, hide coordinates
+      coordinateSection.classList.add('hidden');
+      geojsonSection.classList.remove('hidden');
+    }
+
+    _renderChecklist();
+  }
+
+  function onFileSelect(key, input) {
+    const file = input.files[0];
+    if (!file) return;
+    _files[key] = file;
+
+    if (key === 'thumbnail') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        _files[key] = dataUrl;
+        document.getElementById('thumb-preview-img').src = dataUrl;
+        document.getElementById('thumb-preview-img').style.display = 'block';
+        document.getElementById('thumb-placeholder').style.display = 'none';
+      };
+      reader.readAsDataURL(file);
+    }
+    if (key === 'geometry') {
+      document.getElementById('geojson-filename').textContent = `✓ ${file.name}`;
+    }
+    if (key === 'description') {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target.result;
+        _files[key] = dataUrl;
+        document.getElementById('md-editor').value = dataUrl; };
+      reader.readAsText(file);
+    }
+    _renderChecklist();
+  }
+
+  function addGalleryImages(fileList) {
+    for (const f of fileList) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        _galleryImages.push(e.target.result); // base64 string, not File
+        _files.gallery = _galleryImages;
+        _renderGallery();
+        _renderChecklist();
+      };
+      reader.readAsDataURL(f);
+    }
+  }
+
+  function _removeGalleryImage(index) {
+    _galleryImages.splice(index, 1);
+    _files.gallery = _galleryImages;
+    _renderGallery();
+    _renderChecklist();
+  }
+
+
+  function _renderGallery(dataUrls) {
+    // optionally use dataUrls to populate _galleryImages when fetching images
+    if (dataUrls) _galleryImages = dataUrls;
+
+    const carousel = document.getElementById('gallery-carousel');
+    const count    = document.getElementById('gallery-count');
+    count.textContent = `${_galleryImages.length} image${_galleryImages.length !== 1 ? 's' : ''}`;
+
+    // Re-render all thumbnails
+    const addBtn = carousel.querySelector('.gallery-add-btn');
+    // Remove old thumb elements
+    carousel.querySelectorAll('.gallery-thumb').forEach((el) => el.remove());
+
+    _galleryImages.forEach((dataUrl, idx) => {
+      const thumb  = document.createElement('div');
+      thumb.className = 'gallery-thumb';
+      thumb.innerHTML = `<img><button class="gallery-thumb-remove" onclick="App.Upload._removeGalleryImage(${idx})" title="Remove">✕</button>`;
+      thumb.querySelector('img').src = dataUrl;
+      carousel.insertBefore(thumb, addBtn);
+    });
+  }
+
+  function _renderChecklist() {
+    const type  = document.getElementById('upload-type').value;
+    const items = CHECKLIST_ITEMS[type] || CHECKLIST_ITEMS.sign;
+    const body  = document.getElementById('checklist-body');
+
+    body.innerHTML = items.map(({ key, label }) => {
+      const isDone = key === 'gallery' ? _galleryImages.length > 0 : !!_files[key];
+      const cls    = isDone ? 'done' : '';
+      const icon   = isDone ? '✓' : '⊘';
+      return `
+        <div class="checklist-item ${cls}" data-key="${key}">
+          <span class="ci-name">${label}</span>
+          <div class="ci-status">${icon}</div>
+        </div>`;
+    }).join('');
+
+    // Allow clicking a checklist item to trigger its file input
+    body.querySelectorAll('.checklist-item').forEach((item) => {
+      item.addEventListener('click', () => {
+        const key = item.dataset.key;
+        if (key === 'gallery') document.getElementById('gallery-file-input').click();
+        else if (key === 'thumbnail') document.querySelector('#thumb-preview-area input').click();
+        else if (key === 'geometry') document.querySelector('#geojson-dropzone input').click();
+        else if (key === 'description') {
+          document.getElementById('md-tab-edit').click();
+          document.getElementById('md-editor').focus();
+        }
+      });
+    });
+  }
+
+  function onMdEdit() {
+    const mdValue = document.getElementById('md-editor').value;
+
+    if (mdValue) {
+      _files.description = mdValue; // plain string, no Blob needed
+    } else {
+      delete _files.description;
+    }
+
+    _renderChecklist();
+  }
+
+  function switchMdTab(tab) {
+    const editor   = document.getElementById('md-editor');
+    const preview  = document.getElementById('md-preview');
+    const tabEdit  = document.getElementById('md-tab-edit');
+    const tabPrev  = document.getElementById('md-tab-preview');
+
+    if (tab === 'preview') {
+      editor.style.display  = 'none';
+      preview.style.display = 'block';
+      preview.innerHTML     = App.Utilities.mdToHtml(editor.value);
+      tabEdit.classList.remove('active');
+      tabPrev.classList.add('active');
+    } else {
+      editor.style.display  = 'block';
+      preview.style.display = 'none';
+      tabEdit.classList.add('active');
+      tabPrev.classList.remove('active');
+    }
+  }
+
+  async function submit() {
+    const id        = document.getElementById('upload-id').value.trim();
+    const name      = document.getElementById('upload-name').value.trim();
+    const type      = document.getElementById('upload-type').value;
+    const latitude  = document.getElementById('upload-latitude').value.trim();
+    const longitude = document.getElementById('upload-longitude').value.trim();
+
+    var result = {};
+
+    // ── Verify Entry Forms ──
+    if (!id) { Toast.error('Entity ID is required.'); return; }
+    if (!name) { Toast.error('Entity Name is required.'); return; }
+    if (!latitude) { Toast.error('Entity Latitude is required.'); return; }
+    if (!longitude) { Toast.error('Entity Longitude is required.'); return; }
+
+    // ── Upload mode ──
+    if (_mode === 'upload') {
+      if (App.Table.includesEntity(id)) { Toast.error(`Entity ID ${id} is not unique.`); return; }
+
+      document.getElementById('upload-spinner').classList.add('visible');
+      document.getElementById('upload-submit-btn').disabled = true;
+      document.getElementById('upload-submit-label').textContent = 'Uploading...';
+
+      if (type === 'tree' || type === 'sign') {
+        result = await ServerBridge.uploadEntity({
+          id, type, name, latitude, longitude,
+          files: {
+            thumbnail:   _files.thumbnail   || null,
+            description: _files.description || null,
+            gallery:     _galleryImages     || null,
+          },
+        });
+      } else {
+        result = await ServerBridge.uploadAssetGeometry({
+          id, type, name,
+          files: {
+            thumbnail:   _files.thumbnail   || null,
+            description: _files.description || null,
+            geometry:    _files.geometry    || null,
+            gallery:     _galleryImages,
+          },
+        });
+      }
+
+      if (result.success) {
+        App.Table.addEntity({ id, type, name, lastModified: new Date().toISOString() });
+        Toast.success(`Entity "${name}" uploaded successfully.`);
+        _resetBtn();
+        close();
+      } else {
+        Toast.error('Upload failed: ' + (result.error || 'Unknown error'));
+        _resetBtn();
+      }
+
+    // ── Edit mode ──
+    } else {
+      const idChanged = id !== _editId;
+
+      // If ID changed, validate uniqueness then ask for confirmation
+      if (idChanged) {
+        if (App.Table.includesEntity(id)) { Toast.error(`Entity ID ${id} is already in use.`); return; }
+        const confirmed = await App.IdChange.prompt(_editId, id);
+        if (!confirmed) return;
+      }
+
+      document.getElementById('upload-spinner').classList.add('visible');
+      document.getElementById('upload-submit-btn').disabled = true;
+      document.getElementById('upload-submit-label').textContent = 'Saving...';
+
+      result = await ServerBridge.editEntity(_editId, _editType, {
+        newId:       idChanged ? id : undefined,
+        name,
+        latitude,
+        longitude,
+        thumbnail:   _files.thumbnail,
+        description: _files.description,
+        geometry:    _files.geometry,
+        gallery:     _galleryImages.length > 0 ? _galleryImages : undefined,
+      });
+
+      if (result.success) {
+        App.Table.updateEntity({ id: idChanged ? id : _editId, oldId: _editId, name, lastModified: new Date().toISOString() });
+        Toast.success(`Entity "${name}" saved successfully.`);
+        _resetBtn();
+        close();
+      } else {
+        Toast.error('Save failed: ' + (result.error || 'Unknown error'));
+        _resetBtn();
+      }
+    }
+  }
+
+  function _resetBtn() {
+    document.getElementById('upload-spinner').classList.remove('visible');
+    document.getElementById('upload-submit-btn').disabled = false;
+    document.getElementById('upload-submit-label').textContent = _mode === 'edit' ? '✓ Save Changes' : '⬆ Verify + Upload';
+  }
+
+  return { open, openEdit, close, onTypeChange, onFileSelect, addGalleryImages, _removeGalleryImage, onMdEdit, switchMdTab, submit, _resetBtn };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.Delete — delete confirmation modal
+──────────────────────────────────────────────────────────────────── */
+App.Delete = (() => {
+  let _id = null, _type = null, _name = null;
+
+  function open(id, type, name) {
+    _id = id; _type = type; _name = name;
+    document.getElementById('delete-desc').innerHTML =
+      `Are you sure you want to delete <strong>${name}</strong> (<code class="mono" style="font-size:11px">${id}</code>)?
+      All associated files will be permanently removed from Google Cloud Storage.
+      <br><br><span style="color:var(--warn)">⚠ This action cannot be undone.</span>`;
+    document.getElementById('delete-overlay').classList.remove('hidden');
+  }
+
+  function close() {
+    document.getElementById('delete-overlay').classList.add('hidden');
+    _id = null; _type = null; _name = null;
+  }
+
+  async function confirm() {
+    document.getElementById('delete-spinner').classList.add('visible');
+    document.getElementById('delete-confirm-btn').disabled = true;
+    document.getElementById('delete-confirm-label').textContent = 'Deleting...';
+
+    const result = await ServerBridge.deleteEntity(_id, _type, _name);
+
+    document.getElementById('delete-spinner').classList.remove('visible');
+    document.getElementById('delete-confirm-btn').disabled = false;
+    document.getElementById('delete-confirm-label').textContent = 'Delete Entity';
+
+    if (result.success) {
+      App.Table.removeEntity(_id);
+      Toast.success(`Entity "${_name}" deleted.`);
+      close();
+    } else {
+      Toast.error('Delete failed. Please try again.');
+    }
+  }
+
+  return { open, close, confirm };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.View — read-only entity view modal
+──────────────────────────────────────────────────────────────────── */
+App.View = (() => {
+
+  function open(id, type, name, lastModified) {
+    // Populate static props immediately
+    document.getElementById('view-modal-title').textContent  = `View Entity — ${id}`;
+    document.getElementById('view-prop-id').textContent      = id;
+    document.getElementById('view-prop-type').innerHTML      = `<span class="badge badge-${type}">${type}</span>`;
+    document.getElementById('view-prop-name').textContent    = name;
+    document.getElementById('view-prop-date').textContent    = lastModified ? new Date(lastModified).toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' }) : '—';
+    document.getElementById('view-prop-lat').textContent     = '—';
+    document.getElementById('view-prop-lon').textContent     = '—';
+    document.getElementById('view-description-content').textContent = 'Loading description...';
+
+    // Reset thumbnail
+    document.getElementById('view-thumb-img').style.display      = 'none';
+    document.getElementById('view-thumb-placeholder').style.display = 'flex';
+    document.getElementById('view-thumb-placeholder').textContent  = 'Loading...';
+
+    // Reset gallery
+    document.getElementById('view-gallery').innerHTML =
+      '<div class="view-gallery-empty"><span>Loading gallery... (this will take some time)</span></div>';
+
+    document.getElementById('view-overlay').classList.remove('hidden');
+
+    // Load data from server
+    Promise.allSettled([
+      App.Utilities.loadThumbnail(id, type, document.getElementById('view-thumb-img'), document.getElementById('view-thumb-placeholder')),
+      App.Utilities.loadDescriptionAsText(id, type, document.getElementById('view-description-content')),
+      App.Utilities.loadCoordinatesAsText(id, type, document.getElementById('view-prop-lat'), document.getElementById('view-prop-lon')),
+      App.Utilities.loadGallery(id, type, _renderGallery),
+    ]);
+  }
+
+  function close() {
+    document.getElementById('view-overlay').classList.add('hidden');
+  }
+
+  function _renderGallery(imageUrls) {
+    const gallery = document.getElementById('view-gallery');
+    if (!imageUrls || imageUrls.length === 0) {
+      gallery.innerHTML = '<div class="view-gallery-empty"><span>No gallery images.</span></div>';
+      return;
+    }
+    gallery.innerHTML = imageUrls.map((url, i) => `
+      <div class="view-gallery-thumb">
+        <img src="${url}">
+      </div>`
+    ).join('');
+  }
+
+  return { open, close };
+})();
+
+/* ────────────────────────────────────────────────────────────────────
+   App.IdChange — confirmation popup for editing an entity's ID
+──────────────────────────────────────────────────────────────────── */
+App.IdChange = (() => {
+  let _resolve = null;
+
+  function prompt(oldId, newId) {
+    document.getElementById('id-change-desc').innerHTML =
+      `You are changing the entity ID from <code class="mono" style="font-size:11px">${oldId}</code>
+       to <code class="mono" style="font-size:11px">${newId}</code>.
+       <br><br>All associated files in Google Cloud Storage will be moved to the new path.
+       <br><br><span style="color:var(--warn)">⚠ This action cannot be undone.</span>`;
+    document.getElementById('id-change-overlay').classList.remove('hidden');
+    return new Promise((resolve) => { _resolve = resolve; });
+  }
+
+  function confirm() {
+    document.getElementById('id-change-spinner').classList.add('visible');
+    document.getElementById('id-change-confirm-btn').disabled = true;
+    document.getElementById('id-change-confirm-label').textContent = 'Confirming...';
+    _resolve(true);
+    _cleanup();
+  }
+
+  function cancel() {
+    _resolve(false);
+    _cleanup();
+  }
+
+  function _cleanup() {
+    document.getElementById('id-change-overlay').classList.add('hidden');
+    document.getElementById('id-change-spinner').classList.remove('visible');
+    document.getElementById('id-change-confirm-btn').disabled = false;
+    document.getElementById('id-change-confirm-label').textContent = 'Confirm ID Change';
+    _resolve = null;
+  }
+
+  return { prompt, confirm, cancel };
+})();
+
+/**
+ * Global event handlers
+ * These manage button clicks, drag-over styling, etc.
+ * 
+ */
+// Close overlays on backdrop click
+document.getElementById('upload-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.Upload.close();
+});
+
+document.getElementById('id-change-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.IdChange.cancel();
+});
+
+document.getElementById('delete-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.Delete.close();
+});
+
+document.getElementById('view-overlay').addEventListener('click', function(e) {
+  if (e.target === this) App.View.close();
+});
+
+// Drag-over styling for drop zones
+document.querySelectorAll('.drop-zone').forEach((zone) => {
+  zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+  zone.addEventListener('drop', (e) => {
+    e.preventDefault(); zone.classList.remove('dragover');
+    const input = zone.querySelector('input[type="file"]');
+    if (input && e.dataTransfer.files.length) {
+      // Simulate file input
+      Object.defineProperty(input, 'files', { value: e.dataTransfer.files, writable: false });
+      input.dispatchEvent(new Event('change'));
+    }
+  });
+});
+
+// clean inputs to valid coordinates
+function cleanCoordinate(value) {
+  return value
+    .replace(/[^0-9.\-]/g, '')     // allow only digits, dot, minus
+    .replace(/(?!^)-/g, '')        // only one minus at start
+    .replace(/(\..*)\./g, '$1');   // only one decimal point
+}
+
+document.getElementById('upload-latitude').addEventListener('input', function () {
+  this.value = cleanCoordinate(this.value);
+});
+
+document.getElementById('upload-longitude').addEventListener('input', function () {
+  this.value = cleanCoordinate(this.value);
+});
+
+// Google login button on sign-in screen
+document.getElementById('google-login-btn').addEventListener('click', (event) => {
+  App.Auth.loginWithGoogle();
+});
+
+/* ════════════════════════════════════════════════════════════════════
+   Boot
+══════════════════════════════════════════════════════════════════════ */
+(function init() {
+  console.log('[App] HTTapp Entity and Asset Manager initialising...');
+  // The app starts on the login overlay (shown by default).
+  // App.Auth.loginWithGoogle() or App.Auth.login() will transition to the home page.
+})();
+</script>
