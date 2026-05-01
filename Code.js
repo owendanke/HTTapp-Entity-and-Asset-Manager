@@ -30,7 +30,7 @@ function doGet(e) {
 
 /**
  * Includes an HTML file partial by name.
- * Used in index.html as: <?!= include('Styles'); ?>
+ * Used in index.html as: <?!= include('styles'); ?>
  *
  * @param {string} filename - Name of the .html file (without extension).
  * @returns {string} Raw HTML/CSS/JS content to be inlined.

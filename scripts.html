@@ -471,7 +471,7 @@ App.Utilities = (() => {
   /**
    * Future function which calls [serverGetGeography] from server side to get the GeoJSON file.
    * The result is cached in sessionStorage to reduce api calls.
-   * Returns a promise that either includes the data from cloud or cache, or indicates a failure.
+   * Returns a promise that either includes [lat, lon], or indicates a failure.
   */
   function _fetchCoordinates(id, type) {
     const cacheKeyLatitude  = 'geojson::' + id + 'latitude';
@@ -487,9 +487,11 @@ App.Utilities = (() => {
     // otherwise make server call and get from storage
     return ServerBridge.getGeography(id, type)
       .then(function(coordinates) {
-        sessionStorage.setItem(cacheKeyLatitude, coordinates[1]);
+        // ServerBridge.getGeography returns GeoJSON point which is lon, lat
         sessionStorage.setItem(cacheKeyLongitude, coordinates[0]);
-        return coordinates;
+        sessionStorage.setItem(cacheKeyLatitude, coordinates[1]);
+
+        return [coordinates[1], coordinates[0]];  // swap indices to be human friendly
       });
   }
 
@@ -511,20 +513,7 @@ App.Utilities = (() => {
       .catch(() => { latEl.textContent = 'error'; lonEl.textContent = 'error'; });
   }
 
-  /**
-   * Updates cached coordinates with a new value
-   * @param {string} lat  - latitude string to store
-   * @param {string} lon  - longitude string to store
-  */
-  function updateCoordinates(id, lat, lon) {
-    const cacheKeyLatitude  = 'geojson::' + id + 'latitude';
-    const cacheKeyLongitude = 'geojson::' + id + 'longitude';
-
-    sessionStorage.setItem(cacheKeyLatitude, lat);
-    sessionStorage.setItem(cacheKeyLongitude, lon);
-  }
-
-  return { compressImage, mdToHtml, loadThumbnail, loadGallery, loadDescriptionAsInput, loadDescriptionAsText, loadCoordinatesAsInput, loadCoordinatesAsText, updateCoordinates };
+  return { compressImage, mdToHtml, loadThumbnail, loadGallery, loadDescriptionAsInput, loadDescriptionAsText, loadCoordinatesAsInput, loadCoordinatesAsText };
 })();
 
 /* ────────────────────────────────────────────────────────────────────

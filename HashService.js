@@ -83,7 +83,14 @@ var HashService = (function () {
   function _uploadCatalog(catalog) {
     var json = JSON.stringify(catalog, null, 4);
     var blob = Utilities.newBlob(json, 'application/json', CATALOG_PATH);
-    return StorageService.uploadFile(CATALOG_PATH, blob, 'application/json');
+    var metadata = {
+      name: CATALOG_PATH,
+      contentType: 'application/json',
+      metadata: {
+        master_md5_hash: catalog.master_md5_hash
+      }
+    };
+    return StorageService.uploadFile(CATALOG_PATH, blob, 'application/json', { metadata: { master_md5_hash: catalog.master_md5_hash } });
   }
 
 

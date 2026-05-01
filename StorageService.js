@@ -62,7 +62,7 @@ class StorageService {
    * @param {string} mimeType   - MIME type of the file.
    * @throws {Error} Throws a new Error if the response is not 200
    */
-  static uploadFile(objectPath, fileBlob, mimeType) {
+  static uploadFile(objectPath, fileBlob, mimeType, extraMetadata) {
     const service = AuthService._getCloudService();
     if (!service.hasAccess()) {
       throw new Error('[StorageService.gs][uploadFile] No valid OAuth session');
@@ -72,7 +72,8 @@ class StorageService {
     const token = service.getAccessToken();
 
     // Build multipart body: metadata part + media part
-    const metadata = JSON.stringify({ name: objectPath, contentType: mimeType });
+    var meta = Object.assign({ name: objectPath, contentType: mimeType }, extraMetadata || {});
+    const metadata = JSON.stringify(meta);
     const boundary = 'XXX_MULTI-PART_BOUNDARY_XXX';
 
     const body = Utilities.newBlob(
