@@ -11,7 +11,12 @@ class EntityService {
   static getEntityName(assetId) {
     const catalog = HashService.getCatalog();
     const entity = catalog.entities.find(e => e.id === assetId.trim());
-    return entity ? entity.name : 'MISSING NAME';
+    if ("name" in entity) {
+      return entity.name;
+    }
+    else {
+      return "UNDEFINED NAME";
+    }
   }
 
   /**
@@ -153,7 +158,7 @@ class EntityService {
       }
 
       // ── Update catalog ──
-      const entityName = updates.name || EntityService.getEntityName;
+      const entityName = 'name' in updates ? updates.name : EntityService.getEntityName(newId);
       HashService.commitCatalog({ id: newId, type: entityType, name: entityName });
 
       console.log(`[EntityService.gs][editEntity] SUCCESS — Entity ${entityId} updated`);
